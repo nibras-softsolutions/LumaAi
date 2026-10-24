@@ -582,6 +582,42 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(unauthed.status_code, 401)
 
+    async def test_openai_compatible_model_streaming(self):
+        model = main.OpenAICompatibleModel(
+            model="llama-3.2-3b-preview",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="test-key",
+        )
+        messages = [HumanMessage(content="Explain the second law of thermodynamics.")]
+        
+        async def mock_aiter_lines(_self):
+            yield 'data: {"choices": [{"delta": {"content": "The second law "}}]}'
+            yield 'data: {"choices": [{"delta": {"content": "of thermodynamics states..."}}]}'
+            yield 'data: [DONE]'
+
+        class MockResponse:
+            status_code = 200
+            aiter_lines = mock_aiter_lines
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        class MockClient:
+            def stream(self, method, url, **kwargs):
+                return MockResponse()
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+
+        with patch.object(httpx, "AsyncClient", return_value=MockClient()):
+            chunks = []
+            async for chunk in model.astream(messages):
+                chunks.append(chunk.content)
+            self.assertEqual(chunks, ["The second law ", "of thermodynamics states..."])
+
 
 if __name__ == "__main__":
     unittest.main()
+

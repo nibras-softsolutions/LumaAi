@@ -16,7 +16,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from markdown_it import MarkdownIt
 from ollama import AsyncClient as OllamaAsyncClient
@@ -33,8 +33,110 @@ from auth import (
     router as auth_router,
 )
 
-MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+
+class OpenAICompatibleModel:
+    """Universal adapter for hosted model APIs (Groq, OpenRouter, Together, OpenAI)."""
+
+    def __init__(self, model: str, base_url: str, api_key: str):
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+
+    async def astream(self, messages: list[BaseMessage]) -> AsyncIterator[AIMessageChunk]:
+        payload_messages = []
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                payload_messages.append({"role": "system", "content": msg.content})
+            elif isinstance(msg, HumanMessage):
+                payload_messages.append({"role": "user", "content": msg.content})
+            else:
+                payload_messages.append({"role": "assistant", "content": msg.content})
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        if "openrouter.ai" in self.base_url:
+            headers["HTTP-Referer"] = "https://luma-ai.vercel.app"
+            headers["X-Title"] = "Luma AI"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": self.model,
+                    "messages": payload_messages,
+                    "stream": True,
+                },
+            ) as response:
+                if response.status_code != 200:
+                    error_bytes = await response.aread()
+                    error_msg = error_bytes.decode("utf-8", errors="replace")
+                    raise RuntimeError(
+                        f"Model provider error ({response.status_code}): {error_msg}"
+                    )
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            text = delta.get("content")
+                            if text:
+                                yield AIMessageChunk(content=text)
+                        except Exception:
+                            continue
+
+
+# Model provider configuration: "ollama" (default) or "openai" / "groq" / "openrouter"
+AI_PROVIDER = os.getenv("AI_PROVIDER", "").strip().lower()
+if not AI_PROVIDER:
+    if os.getenv("GROQ_API_KEY"):
+        AI_PROVIDER = "groq"
+    else:
+        AI_PROVIDER = "ollama"
+
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("GROQ_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+if not OPENAI_BASE_URL and AI_PROVIDER == "groq":
+    OPENAI_BASE_URL = "https://api.groq.com/openai/v1"
+elif not OPENAI_BASE_URL and OPENAI_API_KEY:
+    OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+OPENAI_MODEL = os.getenv("OPENAI_MODEL")
+if not OPENAI_MODEL and AI_PROVIDER == "groq":
+    OPENAI_MODEL = "llama-3.2-3b-preview"
+elif not OPENAI_MODEL:
+    OPENAI_MODEL = "llama3.2"
+
+if AI_PROVIDER in {"openai", "groq", "openrouter", "together"} and OPENAI_API_KEY and OPENAI_BASE_URL:
+    MODEL = OPENAI_MODEL
+    llm = OpenAICompatibleModel(
+        model=MODEL,
+        base_url=OPENAI_BASE_URL,
+        api_key=OPENAI_API_KEY,
+    )
+else:
+    MODEL = OLLAMA_MODEL
+    ollama_client_kwargs = {}
+    if OLLAMA_API_KEY:
+        ollama_client_kwargs["headers"] = {"Authorization": f"Bearer {OLLAMA_API_KEY}"}
+    llm = ChatOllama(
+        model=MODEL,
+        base_url=OLLAMA_BASE_URL,
+        client_kwargs=ollama_client_kwargs if ollama_client_kwargs else None,
+    )
+
 MAX_HISTORY_MESSAGES = 40
 MAX_MESSAGE_LENGTH = 12_000
 MAX_HISTORY_LENGTH = 40_000
@@ -84,7 +186,6 @@ app.add_middleware(
 )
 app.include_router(auth_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-llm = ChatOllama(model=MODEL, base_url=OLLAMA_BASE_URL)
 markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 
 
@@ -235,11 +336,32 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/health/ai")
 async def ai_health(_user: User = Depends(require_user)) -> dict[str, str | bool]:
+    if AI_PROVIDER in {"openai", "groq", "openrouter", "together"} and OPENAI_API_KEY and OPENAI_BASE_URL:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+                resp = await client.get(f"{OPENAI_BASE_URL.rstrip('/')}/models", headers=headers)
+                connected = resp.status_code == 200
+                return {
+                    "status": "ok" if connected else "unavailable",
+                    "model": MODEL,
+                    "ollama_connected": connected,
+                    "model_available": connected,
+                }
+        except Exception as exc:
+            logger.warning("AI backend health check failed: %s", type(exc).__name__)
+            return {
+                "status": "unavailable",
+                "model": MODEL,
+                "ollama_connected": False,
+                "model_available": False,
+            }
+
     try:
-        async with OllamaAsyncClient(
-            host=OLLAMA_BASE_URL,
-            timeout=3.0,
-        ) as client:
+        client_kwargs = {"host": OLLAMA_BASE_URL, "timeout": 3.0}
+        if OLLAMA_API_KEY:
+            client_kwargs["headers"] = {"Authorization": f"Bearer {OLLAMA_API_KEY}"}
+        async with OllamaAsyncClient(**client_kwargs) as client:
             response = await client.list()
     except (ConnectionError, httpx.HTTPError, ResponseError):
         logger.warning("AI backend health check failed", exc_info=True)
