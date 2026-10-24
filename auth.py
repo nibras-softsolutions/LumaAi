@@ -69,6 +69,12 @@ COOKIE_SECURE = (
     if COOKIE_SECURE_SETTING is not None
     else bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
 )
+COOKIE_SAMESITE_SETTING = os.getenv("COOKIE_SAMESITE", "lax").casefold()
+COOKIE_SAMESITE = (
+    COOKIE_SAMESITE_SETTING
+    if COOKIE_SAMESITE_SETTING in {"lax", "strict", "none"}
+    else "lax"
+)
 
 _default_origins = [
     "http://127.0.0.1:8765",
@@ -206,8 +212,8 @@ def _set_session_cookie(response: Response, token: str) -> None:
         value=token,
         max_age=int(SESSION_LIFETIME.total_seconds()),
         httponly=True,
-        secure=COOKIE_SECURE,
-        samesite="lax",
+        secure=COOKIE_SECURE or (COOKIE_SAMESITE == "none"),
+        samesite=COOKIE_SAMESITE,
         path="/",
     )
 
@@ -358,8 +364,8 @@ async def logout(request: Request) -> Response:
     response.delete_cookie(
         key=SESSION_COOKIE,
         httponly=True,
-        secure=COOKIE_SECURE,
-        samesite="lax",
+        secure=COOKIE_SECURE or (COOKIE_SAMESITE == "none"),
+        samesite=COOKIE_SAMESITE,
         path="/",
     )
     return response

@@ -100,6 +100,48 @@ pytest
 
 ---
 
+## Deploying Frontend on Vercel
+
+You can deploy the static frontend to **Vercel** and connect it to your live FastAPI backend.
+
+### Architecture
+- **Frontend**: Hosted on Vercel CDN (`index.html`, `static/app.js`, `static/styles.css`).
+- **Database**: Neon Serverless PostgreSQL (`DATABASE_URL`).
+- **Backend**: FastAPI (`main.py`) hosted on Render, Railway, Fly.io, or your own server.
+
+### Option A: Using Vercel Rewrites Proxy (Recommended)
+This approach proxies all `/api/*` requests through Vercel directly to your backend. It completely avoids CORS issues and allows secure `HttpOnly; SameSite=Lax` session cookies to work natively without cross-origin cookie restrictions.
+
+1. In [`vercel.json`](vercel.json), replace `https://YOUR_BACKEND_URL` with your live FastAPI backend URL:
+   ```json
+   {
+     "rewrites": [
+       {
+         "source": "/api/:path*",
+         "destination": "https://your-backend.onrender.com/api/:path*"
+       }
+     ]
+   }
+   ```
+2. Deploy to Vercel:
+   - Import your GitHub repo on [vercel.com](https://vercel.com/new).
+   - Framework Preset: **Other**.
+   - Root Directory: `./`.
+   - Click **Deploy**.
+
+### Option B: Direct Cross-Origin API Connection
+If you prefer direct client-side requests:
+1. In `index.html`, uncomment the `api-base-url` meta tag:
+   ```html
+   <meta name="api-base-url" content="https://your-backend.onrender.com">
+   ```
+2. On your backend environment variables:
+   - `ALLOWED_ORIGINS`: `https://your-project.vercel.app`
+   - `COOKIE_SECURE`: `true`
+   - `COOKIE_SAMESITE`: `none`
+
+---
+
 ## License
 
 MIT License.

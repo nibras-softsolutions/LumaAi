@@ -1,1 +1,261 @@
-static/index.html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#faf9f6">
+    <meta name="description" content="A thoughtful space to chat, think, and create with Luma AI.">
+    <!-- To connect to an external backend directly, uncomment and set your backend URL: -->
+    <!-- <meta name="api-base-url" content="https://your-backend-api.onrender.com"> -->
+    <title>Luma AI</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <main class="experience-view onboarding-view" id="onboardingView" hidden aria-labelledby="onboardingHeadline">
+      <header class="experience-header">
+        <a class="experience-brand" href="/" aria-label="Luma AI">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg>
+          <span>Luma AI</span>
+        </a>
+        <button class="text-button" id="skipOnboarding" type="button">Skip</button>
+      </header>
+      <section class="onboarding-content">
+        <div class="onboarding-art" id="onboardingArt" aria-hidden="true">
+          <svg class="onboarding-sparkle" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg>
+        </div>
+        <p class="onboarding-step" id="onboardingStepLabel">01 — Welcome to Luma AI</p>
+        <h1 id="onboardingHeadline" tabindex="-1">A thoughtful space to think.</h1>
+        <p class="onboarding-description" id="onboardingDescription">Meet Luma AI, your personal space to explore ideas, solve problems, and discover new possibilities.</p>
+      </section>
+      <footer class="onboarding-footer">
+        <button class="back-button" id="onboardingBack" type="button" aria-label="Previous introduction screen" hidden>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 18-6-6 6-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Back</span>
+        </button>
+        <div class="onboarding-progress" id="onboardingProgress" role="group" aria-label="Introduction progress">
+          <span class="active" aria-label="Screen 1 of 4"></span><span aria-label="Screen 2 of 4"></span>
+          <span aria-label="Screen 3 of 4"></span><span aria-label="Screen 4 of 4"></span>
+        </div>
+        <button class="primary-button" id="onboardingNext" type="button">Next</button>
+      </footer>
+    </main>
+
+    <main class="experience-view auth-view" id="authView" hidden>
+      <a class="experience-brand auth-brand" href="/" aria-label="Luma AI">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg>
+        <span>Luma AI</span>
+      </a>
+      <section class="auth-card" id="authLanding" hidden aria-labelledby="authHeadline">
+        <div class="auth-sparkle" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg></div>
+        <p class="auth-eyebrow">YOUR SPACE TO THINK</p>
+        <h1 id="authHeadline">Your next idea starts here.</h1>
+        <p class="auth-description">Sign in to continue your conversations or create an account to get started.</p>
+        <div class="auth-actions">
+          <button class="primary-button auth-primary" id="openLogin" type="button">Log in</button>
+          <button class="secondary-button" id="openRegister" type="button">Create an account</button>
+        </div>
+        <p class="legal-copy">By continuing, you agree to our <span title="Terms link needs configuration">Terms</span> and <span title="Privacy Policy link needs configuration">Privacy Policy</span>. Legal page links need configuration.</p>
+      </section>
+      <section class="auth-card auth-form-card" id="loginPanel" hidden aria-labelledby="loginHeadline">
+        <button class="auth-back-link" id="loginBack" type="button">← Back</button>
+        <p class="auth-eyebrow">WELCOME BACK</p>
+        <h1 id="loginHeadline">Log in to Luma AI</h1>
+        <p class="auth-description">Continue where your ideas left off.</p>
+        <form id="loginForm" novalidate>
+          <label for="loginEmail">Email address</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="email" maxlength="254" required>
+          <label for="loginPassword">Password</label>
+          <div class="password-field">
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+            <button class="password-toggle" type="button" data-password-toggle="loginPassword" aria-label="Show password" aria-pressed="false">Show</button>
+          </div>
+          <p class="auth-form-message" id="loginMessage" role="alert" aria-live="assertive"></p>
+          <button class="primary-button auth-primary" id="loginSubmit" type="submit">Log in</button>
+        </form>
+        <p class="auth-switch">New to Luma AI? <button type="button" id="loginToRegister">Create an account</button></p>
+      </section>
+      <section class="auth-card auth-form-card" id="registerPanel" hidden aria-labelledby="registerHeadline">
+        <button class="auth-back-link" id="registerBack" type="button">← Back</button>
+        <p class="auth-eyebrow">A FRESH START</p>
+        <h1 id="registerHeadline">Create your account</h1>
+        <p class="auth-description">Make a little room for what’s next.</p>
+        <form id="registerForm" novalidate>
+          <label for="registerName">Full name</label>
+          <input id="registerName" name="full_name" type="text" autocomplete="name" maxlength="100" required>
+          <label for="registerEmail">Email address</label>
+          <input id="registerEmail" name="email" type="email" autocomplete="email" maxlength="254" required>
+          <label for="registerPassword">Password</label>
+          <div class="password-field">
+            <input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required aria-describedby="passwordHint">
+            <button class="password-toggle" type="button" data-password-toggle="registerPassword" aria-label="Show password" aria-pressed="false">Show</button>
+          </div>
+          <p class="field-hint" id="passwordHint">Use at least 12 characters.</p>
+          <label for="registerPasswordConfirm">Confirm password</label>
+          <div class="password-field">
+            <input id="registerPasswordConfirm" name="password_confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+            <button class="password-toggle" type="button" data-password-toggle="registerPasswordConfirm" aria-label="Show password" aria-pressed="false">Show</button>
+          </div>
+          <p class="auth-form-message" id="registerMessage" role="alert" aria-live="assertive"></p>
+          <button class="primary-button auth-primary" id="registerSubmit" type="submit">Create account</button>
+        </form>
+        <p class="auth-switch">Already have an account? <button type="button" id="registerToLogin">Log in</button></p>
+      </section>
+      <p class="auth-connection-message" id="authConnectionMessage" role="status" aria-live="polite" hidden></p>
+    </main>
+
+    <div class="app-shell" id="appShell" hidden>
+      <button class="drawer-scrim" id="drawerScrim" aria-label="Close conversation sidebar" tabindex="-1"></button>
+      <aside class="sidebar" id="sidebar" aria-label="Conversation sidebar">
+        <div class="sidebar-header">
+          <a class="brand" href="/" aria-label="Luma AI home">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg>
+            </span>
+            <span>Luma AI</span>
+          </a>
+          <button class="icon-button sidebar-collapse" id="collapseSidebar" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M9 5v14" stroke="currentColor" stroke-width="1.6"/></svg>
+          </button>
+        </div>
+
+        <button class="new-chat-button" id="newChatButton" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <span>New chat</span>
+          <kbd>⌘ K</kbd>
+        </button>
+
+        <nav class="primary-nav" aria-label="Main navigation">
+          <button class="nav-item active" id="chatNavButton" type="button" aria-current="page">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2v-5.5A7.5 7.5 0 1 1 20 11.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            <span>Chat</span>
+          </button>
+          <button class="nav-item unavailable-nav" type="button" disabled title="File tools are not available in this version">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3.5h8l4.5 4.7V20a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3.8V9h4.2" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            <span>Files</span><span class="nav-coming-soon">Soon</span>
+          </button>
+          <button class="nav-item unavailable-nav" type="button" disabled title="Tools are not available in this version">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="6" height="6" rx="1.4" stroke="currentColor" stroke-width="1.6"/></svg>
+            <span>Tools</span><span class="nav-coming-soon">Soon</span>
+          </button>
+          <button class="nav-item" id="settingsNavButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="m19.4 13.5 1.1.9-1.5 2.6-1.4-.5a7.8 7.8 0 0 1-1.7 1l-.3 1.5h-3l-.3-1.5a7.8 7.8 0 0 1-1.7-1l-1.4.5-1.5-2.6 1.1-.9a7 7 0 0 1 0-2l-1.1-.9 1.5-2.6 1.4.5a7.8 7.8 0 0 1 1.7-1l.3-1.5h3l.3 1.5a7.8 7.8 0 0 1 1.7 1l1.4-.5 1.5 2.6-1.1.9a7 7 0 0 1 0 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <span>Settings</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-divider"></div>
+        <div class="recent-heading">
+          <h2>Recent Chats</h2>
+          <button class="icon-button recent-menu-button" id="historyMoreButton" type="button" aria-label="Recent chat options" aria-expanded="false" title="Recent chat options">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
+          <div class="history-menu" id="historyMenu" hidden>
+            <button type="button" id="clearHistoryMenuButton">Clear all conversations</button>
+          </div>
+        </div>
+        <div class="search-box" id="searchBox" hidden>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.7"/><path d="m15.5 15.5 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <input id="searchInput" type="search" placeholder="Search conversations" autocomplete="off" aria-label="Search conversations">
+        </div>
+        <nav class="history" id="historyList" aria-label="Recent conversations"></nav>
+
+        <div class="sidebar-footer">
+          <button class="profile-button" id="settingsButton" type="button" aria-label="Open profile and settings">
+            <span class="profile-avatar" aria-hidden="true">N</span>
+            <span class="profile-copy"><strong id="profileName">Luma AI</strong><span>Personal workspace</span></span>
+            <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 5 7 7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="topbar-leading">
+            <button class="icon-button mobile-menu" id="openSidebar" type="button" aria-label="Open conversation sidebar">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <button class="icon-button desktop-expand" id="expandSidebar" type="button" aria-label="Expand sidebar" title="Expand sidebar">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M9 5v14M14 9l3 3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <span class="header-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.7 14.7 9l7.6 3-7.6 3-2.7 7.3L9.3 15 1.7 12l7.6-3L12 1.7Z"/></svg></span>
+            <div class="conversation-heading">
+              <span class="header-title-group"><strong>Luma AI</strong><span id="conversationTitle">New conversation</span></span>
+              <span class="topbar-model" role="status" aria-live="polite"><span class="status-dot checking" id="topbarStatusDot" aria-hidden="true"></span><span id="topbarModelStatus">Connecting…</span></span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <button class="stop-button topbar-stop" id="topbarStopButton" type="button" hidden>
+              <span class="stop-square" aria-hidden="true"></span>Stop
+            </button>
+            <button class="icon-button header-action" id="headerSearchButton" type="button" aria-label="Search conversations" title="Search conversations">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.7"/><path d="m15.5 15.5 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
+            <button class="icon-button header-action" id="headerMoreButton" type="button" aria-label="More options" aria-expanded="false" title="More options">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+            </button>
+            <button class="icon-button topbar-new-chat" id="topbarNewChat" type="button" aria-label="New chat" title="New chat">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <div class="header-menu" id="headerMenu" hidden>
+              <button type="button" id="headerNewChatButton">New chat</button>
+              <button type="button" id="headerSettingsButton">Settings</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="conversation" id="conversation" aria-label="Conversation">
+          <div class="messages" id="messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        </section>
+
+        <footer class="composer-area">
+          <form class="composer" id="composerForm">
+            <label class="sr-only" for="messageInput">Message Luma AI</label>
+            <button class="composer-attachment" type="button" disabled aria-label="Attachments are not available" title="Attachments are not available in this version">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m8.5 12.5 6.2-6.2a3 3 0 0 1 4.2 4.2l-8.4 8.4a5 5 0 0 1-7.1-7.1l8-8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="composer-input-wrap">
+              <textarea id="messageInput" rows="1" maxlength="12000" placeholder="Type your message..." enterkeyhint="send"></textarea>
+            </div>
+            <div class="composer-actions">
+              <button class="stop-button composer-stop" id="stopButton" type="button" hidden>
+                <span class="stop-square" aria-hidden="true"></span>Stop
+              </button>
+              <button class="send-button" id="sendButton" type="submit" aria-label="Send message" disabled>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 14-7-4.8 14-2.8-5.3L5 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m11.4 13.7 4.1-4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </form>
+          <p class="composer-disclaimer">Responses may not always be accurate. Browser history is not encrypted.</p>
+        </footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+      <div class="dialog-header">
+        <div><p class="eyebrow">Luma AI</p><h2 id="settingsTitle">Settings &amp; model</h2></div>
+        <button class="icon-button" id="closeSettings" type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="settings-model-card">
+        <span class="model-avatar large" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 4.5h8A3.5 3.5 0 0 1 19.5 8v8a3.5 3.5 0 0 1-3.5 3.5H8A3.5 3.5 0 0 1 4.5 16V8A3.5 3.5 0 0 1 8 4.5Z" stroke="currentColor" stroke-width="1.5"/><path d="M9 9h6v6H9zM8 2v2.5M16 2v2.5M8 19.5V22M16 19.5V22M2 8h2.5M19.5 8H22M2 16h2.5M19.5 16H22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+        <div><strong id="settingsModelName">llama3.2</strong><p>AI model</p></div>
+        <span class="status-dot checking" id="settingsStatusDot" aria-hidden="true"></span>
+      </div>
+      <div class="privacy-notice">
+        <strong>Conversation privacy</strong>
+        <p>Chat history is saved in this browser’s local storage. It is not encrypted and is not suitable for secrets.</p>
+      </div>
+      <button class="clear-history-button" id="clearHistoryButton" type="button">Clear all conversations</button>
+      <button class="logout-button" id="logoutButton" type="button">Log out</button>
+      <p class="settings-version">Luma AI · Chat history stored in this browser</p>
+    </dialog>
+  </body>
+</html>
