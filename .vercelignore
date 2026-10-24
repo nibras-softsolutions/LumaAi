@@ -1,0 +1,12 @@
+.env
+.env.*
+.git/
+.pytest_cache/
+.vscode/
+__pycache__/
+*.py[cod]
+tests/
+tools.py
+venv/
+.venv/
+.vercel/
