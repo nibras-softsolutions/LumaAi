@@ -200,6 +200,8 @@ def _ensure_same_origin(request: Request) -> None:
     origin_base = f"{parsed_origin.scheme}://{parsed_origin.netloc}".rstrip("/")
     if origin_base in ALLOWED_ORIGINS:
         return
+    if parsed_origin.netloc.endswith(".vercel.app") and parsed_origin.scheme in {"http", "https"}:
+        return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="This request could not be verified.",

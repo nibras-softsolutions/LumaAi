@@ -77,6 +77,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(ALLOWED_ORIGINS),
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,7 +91,7 @@ markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    connect_sources = " ".join(["'self'"] + sorted(ALLOWED_ORIGINS))
+    connect_sources = " ".join(["'self'"] + sorted(ALLOWED_ORIGINS) + ["https://*.vercel.app"])
     response.headers["Content-Security-Policy"] = (
         f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
         f"img-src 'self' data:; connect-src {connect_sources}; object-src 'none'; "
