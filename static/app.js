@@ -1713,12 +1713,14 @@ let voiceAudioChunks = [];
 let voiceIsMuted = false;
 let voiceSpeechQueue = [];
 let voiceIsSpeaking = false;
+let voiceIsGenerationStreaming = false;
 let voiceGenerationController = null;
 let voiceSilenceTimer = 0;
-let voiceFinalTranscript = "";
+let voiceCurrentTranscript = "";
 let voiceSpeechDetected = false;
 let voiceSilenceStartTime = 0;
 let voiceLastSpokenText = "";
+let voiceTtsWatchdog = 0;
 
 function setVoiceState(newState) {
   voiceState = newState;
@@ -1729,7 +1731,7 @@ function setVoiceState(newState) {
 
   if (newState === "listening") {
     if (voiceStatusLabel) voiceStatusLabel.textContent = "Listening…";
-    if (voiceActionText) voiceActionText.textContent = "Listening…";
+    if (voiceActionText) voiceActionText.textContent = voiceCurrentTranscript ? "Tap to send" : "Listening…";
   } else if (newState === "thinking") {
     if (voiceStatusLabel) voiceStatusLabel.textContent = "Thinking…";
     if (voiceActionText) voiceActionText.textContent = "Thinking…";
@@ -1762,13 +1764,13 @@ function sanitizeForSpeech(rawText) {
 
 function extractNextSentence(buffer) {
   if (!buffer) return null;
-  const match = buffer.match(/^(.*?[.!?\n])(?:\s+|$)([\s\S]*)$/);
+  const match = buffer.match(/^([\s\S]*?[.!?\n]+)(?:\s+|$)([\s\S]*)$/);
   if (!match) return null;
   const candidate = match[1].trim();
   if (/(?:e\.g|i\.e|vs|mr|mrs|ms|dr|prof)\.$/i.test(candidate)) {
     return null;
   }
-  if (candidate.length < 3) return null;
+  if (candidate.length < 2) return null;
   return {
     sentence: candidate,
     remaining: match[2] || "",
@@ -1789,6 +1791,10 @@ function getBestVoice() {
 function stopVoiceSpeech() {
   voiceSpeechQueue = [];
   voiceIsSpeaking = false;
+  if (voiceTtsWatchdog) {
+    clearInterval(voiceTtsWatchdog);
+    voiceTtsWatchdog = 0;
+  }
   if (window.speechSynthesis) {
     try {
       window.speechSynthesis.cancel();
@@ -1801,7 +1807,12 @@ function playNextVoiceSpeech(turnId) {
 
   if (voiceSpeechQueue.length === 0) {
     voiceIsSpeaking = false;
-    if (voiceState === "speaking") {
+    if (voiceTtsWatchdog) {
+      clearInterval(voiceTtsWatchdog);
+      voiceTtsWatchdog = 0;
+    }
+    // Only switch back to listening once the entire LLM generation stream is complete!
+    if (!voiceIsGenerationStreaming && voiceState === "speaking") {
       setVoiceState("listening");
       if (voiceUserText) voiceUserText.textContent = "Listening…";
       startVoiceListeningCycle();
@@ -1817,17 +1828,42 @@ function playNextVoiceSpeech(turnId) {
     return;
   }
 
+  if (window.speechSynthesis && window.speechSynthesis.paused) {
+    try {
+      window.speechSynthesis.resume();
+    } catch {}
+  }
+
   const utterance = new SpeechSynthesisUtterance(sentence);
   const voice = getBestVoice();
   if (voice) utterance.voice = voice;
   utterance.rate = 1.05;
   utterance.pitch = 1.0;
 
+  if (voiceTtsWatchdog) clearInterval(voiceTtsWatchdog);
+  voiceTtsWatchdog = setInterval(() => {
+    if (!voiceIsSpeaking) {
+      clearInterval(voiceTtsWatchdog);
+      return;
+    }
+    if (window.speechSynthesis && window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+  }, 2500);
+
   utterance.onend = () => {
+    if (voiceTtsWatchdog) {
+      clearInterval(voiceTtsWatchdog);
+      voiceTtsWatchdog = 0;
+    }
     if (turnId && turnId !== voiceTurnCounter) return;
     playNextVoiceSpeech(turnId);
   };
   utterance.onerror = (e) => {
+    if (voiceTtsWatchdog) {
+      clearInterval(voiceTtsWatchdog);
+      voiceTtsWatchdog = 0;
+    }
     console.warn("Speech synthesis utterance error:", e);
     if (turnId && turnId !== voiceTurnCounter) return;
     playNextVoiceSpeech(turnId);
@@ -1837,6 +1873,10 @@ function playNextVoiceSpeech(turnId) {
     window.speechSynthesis.speak(utterance);
   } catch (err) {
     console.warn("Speech synthesis speak error:", err);
+    if (voiceTtsWatchdog) {
+      clearInterval(voiceTtsWatchdog);
+      voiceTtsWatchdog = 0;
+    }
     playNextVoiceSpeech(turnId);
   }
 }
@@ -1853,6 +1893,7 @@ function enqueueVoiceSentence(sentence, turnId) {
 
 function interruptVoice() {
   voiceTurnCounter++;
+  voiceIsGenerationStreaming = false;
   stopVoiceSpeech();
   if (voiceGenerationController) {
     try {
@@ -1877,23 +1918,25 @@ async function startVoiceVisualizer(stream) {
     }
     const source = voiceAudioContext.createMediaStreamSource(stream);
     voiceAnalyser = voiceAudioContext.createAnalyser();
-    voiceAnalyser.fftSize = 64;
+    voiceAnalyser.fftSize = 128;
     source.connect(voiceAnalyser);
 
-    const dataArray = new Uint8Array(voiceAnalyser.frequencyBinCount);
+    const timeDomainData = new Uint8Array(voiceAnalyser.fftSize);
 
     function draw() {
       if (voiceState === "closed") return;
       voiceAnimFrame = requestAnimationFrame(draw);
 
       if (voiceState === "listening" && !voiceIsMuted && voiceAnalyser) {
-        voiceAnalyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+        voiceAnalyser.getByteTimeDomainData(timeDomainData);
+        let sumSq = 0;
+        for (let i = 0; i < timeDomainData.length; i++) {
+          const v = (timeDomainData[i] - 128) / 128;
+          sumSq += v * v;
         }
-        const avg = sum / dataArray.length;
-        const scale = 1 + Math.min(avg / 128, 1) * 0.35;
+        const rms = Math.sqrt(sumSq / timeDomainData.length);
+
+        const scale = 1 + Math.min(rms * 2.2, 0.42);
         if (voiceOrb) {
           voiceOrb.style.transform = `scale(${scale.toFixed(3)})`;
         }
@@ -1902,18 +1945,19 @@ async function startVoiceVisualizer(stream) {
         if (ripple1) ripple1.style.transform = `scale(${(scale * 1.05).toFixed(3)})`;
         if (ripple2) ripple2.style.transform = `scale(${(scale * 1.12).toFixed(3)})`;
 
-        // Silence detection fallback for audio blob transcription
+        // Silence / speech detection via RMS energy
         const now = Date.now();
-        if (avg > 18) {
+        if (rms > 0.02) {
           voiceSpeechDetected = true;
           voiceSilenceStartTime = 0;
-        } else if (voiceSpeechDetected && avg <= 14) {
+        } else if (voiceSpeechDetected && rms <= 0.018) {
           if (!voiceSilenceStartTime) voiceSilenceStartTime = now;
-          else if (now - voiceSilenceStartTime > 1300) {
+          else if (now - voiceSilenceStartTime > 1200) {
             voiceSpeechDetected = false;
             voiceSilenceStartTime = 0;
-            // If browser SpeechRecognition did not yield a final transcript, fallback to Groq Whisper
-            if (!voiceFinalTranscript.trim()) {
+            if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
+              submitVoiceTurn(voiceCurrentTranscript.trim());
+            } else if (voiceAudioChunks.length > 0) {
               finalizeAudioBlobRecording();
             }
           }
@@ -1943,15 +1987,27 @@ function stopVoiceVisualizer() {
 
 function startVoiceListeningCycle() {
   if (voiceState !== "listening" || voiceIsMuted) return;
-  voiceFinalTranscript = "";
+  window.clearTimeout(voiceSilenceTimer);
+  voiceCurrentTranscript = "";
   voiceAudioChunks = [];
   voiceSpeechDetected = false;
   voiceSilenceStartTime = 0;
 
+  // Clean previous recognition instance
+  if (voiceRecognition) {
+    try {
+      voiceRecognition.onresult = null;
+      voiceRecognition.onerror = null;
+      voiceRecognition.onend = null;
+      voiceRecognition.abort();
+    } catch {}
+    voiceRecognition = null;
+  }
+
   // 1. Browser SpeechRecognition (Web Speech API)
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SpeechRec) {
-    if (!voiceRecognition) {
+    try {
       voiceRecognition = new SpeechRec();
       voiceRecognition.continuous = true;
       voiceRecognition.interimResults = true;
@@ -1969,18 +2025,22 @@ function startVoiceListeningCycle() {
             interim += res[0].transcript;
           }
         }
-        if (interim && voiceUserText) {
-          voiceUserText.textContent = interim;
-        }
-        if (final) {
-          voiceFinalTranscript = (voiceFinalTranscript + " " + final).trim();
-          if (voiceUserText) voiceUserText.textContent = voiceFinalTranscript;
+
+        const candidate = (final || interim).trim();
+        if (candidate) {
+          voiceCurrentTranscript = candidate;
+          if (voiceUserText) voiceUserText.textContent = voiceCurrentTranscript;
+          if (voiceActionText) voiceActionText.textContent = "Tap to send";
+          voiceSpeechDetected = true;
+          voiceSilenceStartTime = 0;
+
+          // Conversational pause trigger
           window.clearTimeout(voiceSilenceTimer);
           voiceSilenceTimer = window.setTimeout(() => {
-            if (voiceFinalTranscript.trim()) {
-              submitVoiceTurn(voiceFinalTranscript.trim());
+            if (voiceState === "listening" && voiceCurrentTranscript.trim()) {
+              submitVoiceTurn(voiceCurrentTranscript.trim());
             }
-          }, 950);
+          }, final ? 800 : 1100);
         }
       };
 
@@ -1996,16 +2056,19 @@ function startVoiceListeningCycle() {
           } catch {}
         }
       };
-    }
 
-    try {
       voiceRecognition.start();
-    } catch {}
+    } catch (err) {
+      console.warn("SpeechRecognition init error:", err);
+    }
   }
 
-  // 2. MediaRecorder for cross-browser fallback / Groq Whisper
+  // 2. MediaRecorder for continuous cross-browser fallback / Groq Whisper
   if (voiceMediaStream && typeof MediaRecorder !== "undefined") {
     try {
+      if (voiceMediaRecorder && voiceMediaRecorder.state !== "inactive") {
+        try { voiceMediaRecorder.stop(); } catch {}
+      }
       let mimeType = "audio/webm";
       if (!MediaRecorder.isTypeSupported("audio/webm")) {
         mimeType = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
@@ -2024,8 +2087,12 @@ function startVoiceListeningCycle() {
 }
 
 function stopVoiceRecording() {
+  window.clearTimeout(voiceSilenceTimer);
   if (voiceRecognition) {
     try {
+      voiceRecognition.onresult = null;
+      voiceRecognition.onerror = null;
+      voiceRecognition.onend = null;
       voiceRecognition.stop();
     } catch {}
   }
@@ -2044,7 +2111,7 @@ async function finalizeAudioBlobRecording() {
   }
   const mimeType = voiceMediaRecorder?.mimeType || "audio/webm";
   const blob = new Blob(voiceAudioChunks, { type: mimeType });
-  if (blob.size < 1000) {
+  if (blob.size < 600) {
     startVoiceListeningCycle();
     return;
   }
@@ -2083,6 +2150,7 @@ async function submitVoiceTurn(userText) {
   }
 
   const thisTurn = ++voiceTurnCounter;
+  voiceIsGenerationStreaming = true;
   stopVoiceRecording();
   setVoiceState("thinking");
   if (voiceUserText) voiceUserText.textContent = userText;
@@ -2167,6 +2235,8 @@ async function submitVoiceTurn(userText) {
 
     if (thisTurn !== voiceTurnCounter) return;
 
+    voiceIsGenerationStreaming = false;
+
     if (sentenceBuffer.trim()) {
       enqueueVoiceSentence(sentenceBuffer, thisTurn);
     }
@@ -2177,6 +2247,7 @@ async function submitVoiceTurn(userText) {
     chat.updatedAt = Date.now();
     persist();
   } catch (err) {
+    voiceIsGenerationStreaming = false;
     if (thisTurn !== voiceTurnCounter) return;
 
     if (err.name === "AbortError") {
@@ -2191,6 +2262,7 @@ async function submitVoiceTurn(userText) {
     persist();
   } finally {
     if (thisTurn === voiceTurnCounter) {
+      voiceIsGenerationStreaming = false;
       if (activeGeneration?.assistantId === assistantMessage.id) {
         activeGeneration = null;
       }
@@ -2210,9 +2282,13 @@ async function openVoiceMode() {
     return;
   }
 
+  // Prime and unlock speech synthesis with user interaction
   if (window.speechSynthesis) {
     try {
       window.speechSynthesis.getVoices();
+      const dummy = new SpeechSynthesisUtterance("");
+      window.speechSynthesis.speak(dummy);
+      window.speechSynthesis.cancel();
     } catch {}
   }
 
@@ -2307,6 +2383,13 @@ if (voiceVisualizerWrap) {
       interruptVoice();
     } else if (voiceState === "muted") {
       toggleVoiceMute();
+    } else if (voiceState === "listening") {
+      // Tap orb to send or finish speaking immediately
+      if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
+        submitVoiceTurn(voiceCurrentTranscript.trim());
+      } else if (voiceAudioChunks.length > 0) {
+        finalizeAudioBlobRecording();
+      }
     }
   });
 }
@@ -2316,6 +2399,13 @@ if (voiceActionBtn) {
       interruptVoice();
     } else if (voiceState === "muted") {
       toggleVoiceMute();
+    } else if (voiceState === "listening") {
+      // Tap action button to send or finish speaking immediately
+      if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
+        submitVoiceTurn(voiceCurrentTranscript.trim());
+      } else if (voiceAudioChunks.length > 0) {
+        finalizeAudioBlobRecording();
+      }
     }
   });
 }
