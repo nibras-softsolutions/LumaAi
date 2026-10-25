@@ -28,12 +28,17 @@ const topbarStopButton = document.querySelector("#topbarStopButton");
 const toastEl = document.querySelector("#toast");
 const searchInput = document.querySelector("#searchInput");
 const settingsDialog = document.querySelector("#settingsDialog");
+const composerToolbar = document.querySelector("#composerToolbar");
+const imageModeToggle = document.querySelector("#imageModeToggle");
+const closeImageMode = document.querySelector("#closeImageMode");
+const aspectRatioSelect = document.querySelector("#aspectRatioSelect");
 const messageNodes = new Map();
 
 let authenticatedUser = null;
 let conversations = [];
 let currentConversation = makeConversation();
 let activeGeneration = null;
+let isImageMode = false;
 let onboardingStep = 0;
 let healthInterval = 0;
 let toastTimeout = 0;
@@ -123,6 +128,17 @@ function loadConversations() {
               : message.status === "streaming"
                 ? "failed"
                 : "complete",
+            image: message.image && typeof message.image.image_url === "string" ? {
+              id: message.image.id || "",
+              prompt: message.image.prompt || "",
+              aspect_ratio: message.image.aspect_ratio || "1:1",
+              image_url: message.image.image_url,
+              width: message.image.width || 1024,
+              height: message.image.height || 1024,
+              provider: message.image.provider || "",
+              model: message.image.model || "",
+            } : null,
+            isImage: Boolean(message.image || message.isImage),
             error: message.status === "streaming"
               ? "This response was interrupted when the page closed."
               : typeof message.error === "string" && /ollama/i.test(message.error)
@@ -432,10 +448,15 @@ function createMessage(message, conversationId) {
     main.append(actions);
     entry.actions = actions;
     entry.error = null;
+    if (message.image) {
+      main.append(createImageCard(message.image, message.id));
+    } else if (message.isImage && message.status === "streaming") {
+      main.append(createImageSkeleton());
+    }
     if (message.status === "streaming") {
       body.classList.add("streaming-text");
       if (!message.content) body.append(createThinkingIndicator());
-    } else if (message.status === "complete" && message.content) {
+    } else if (message.status === "complete" && message.content && !message.image) {
       requestMarkdown(message.id, conversationId, message.content);
     }
     if (message.status === "failed") showMessageError(entry, message);
@@ -461,7 +482,11 @@ function updateAssistantMessage(chat, message) {
   if (!entry) return;
   entry.body.classList.add("streaming-text");
   entry.body.textContent = message.content;
-  if (!message.content) entry.body.append(createThinkingIndicator());
+  if (!message.content && !message.isImage) entry.body.append(createThinkingIndicator());
+  if (message.image && !entry.card.querySelector(".image-card")) {
+    entry.card.querySelector(".image-card-loading")?.remove();
+    entry.card.querySelector(".message-main")?.append(createImageCard(message.image, message.id));
+  }
   keepScrolledToBottom();
 }
 
@@ -695,6 +720,7 @@ function updateGenerationControls() {
   topbarStopButton.hidden = !generating;
   sendButton.hidden = generating;
   sendButton.disabled = generating || !messageInput.value.trim();
+  if (imageModeToggle) imageModeToggle.disabled = generating;
   messageInput.setAttribute("aria-busy", String(generating));
 }
 
@@ -709,7 +735,144 @@ function titleFromFirstMessage(text) {
   return normalized.length > 48 ? `${normalized.slice(0, 47).trimEnd()}…` : normalized;
 }
 
-async function sendMessage(text = messageInput.value.trim(), retryMessageId = null) {
+function detectImageIntent(text) {
+  const t = text.trim();
+  if (t.length < 2) return { isImage: false, prompt: t, aspect: "1:1" };
+  if (/\b(?:function|class|method|component|script|algorithm|api|endpoint|sql|database|python|html|css|javascript|typescript|c\+\+|java|rust|go)\b/i.test(t)) {
+    return { isImage: false, prompt: t, aspect: "1:1" };
+  }
+  let aspect = "1:1";
+  const arMatch = t.match(/\b(?:in\s+)?(?:aspect\s+ratio\s+|format\s+)?(1:1|16:9|9:16|4:3)(?:\s+(?:format|aspect\s+ratio|ratio))?\b/i);
+  let cleanText = t;
+  if (arMatch) {
+    aspect = arMatch[1];
+    cleanText = t.replace(arMatch[0], "").trim();
+  }
+  const visualNouns = "image|picture|photo|photograph|illustration|icon|wallpaper|graphic|artwork|landscape|portrait|scene|concept|logo|poster|render(?:ing)?|visual|drawing|painting|avatar|banner|thumbnail|mockup";
+  const intentRegex = new RegExp(`^\\s*(?:please\\s+)?(?:generate|create|render|draw|make|design|paint)\\s+(?:an?\\s+|the\\s+)?(?:[\\w-]+\\s+){0,6}(?:${visualNouns})\\b`, "i");
+  const sceneRegex = /^\s*(?:please\s+)?(?:generate|create|draw|paint|render)\s+(?:an?\\s+|the\\s+)?(?:[\w-]+\s+){0,4}(?:city|view|skyline|sunset|sunrise|forest|planet|galaxy|room|ocean|castle|temple)\b/i;
+  const isIntent = intentRegex.test(cleanText) || sceneRegex.test(cleanText) || /^draw\s+/i.test(cleanText) || /^\/image\s+/i.test(cleanText);
+  let cleanPrompt = cleanText;
+  if (/^\/image\s+/i.test(cleanPrompt)) cleanPrompt = cleanPrompt.slice(7).trim();
+  return { isImage: isIntent, prompt: cleanPrompt, aspect };
+}
+
+function updateImageModeUi() {
+  if (!composerToolbar || !imageModeToggle) return;
+  composerToolbar.hidden = !isImageMode;
+  imageModeToggle.classList.toggle("active", isImageMode);
+  if (isImageMode) {
+    messageInput.placeholder = "Describe the image you want to generate…";
+    messageInput.focus();
+  } else {
+    messageInput.placeholder = "Type your message...";
+  }
+}
+
+function createImageCard(image, messageId) {
+  const card = document.createElement("div");
+  card.className = "image-card";
+  card.dataset.imageId = image.id || "";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "image-preview-wrapper";
+  wrapper.dataset.aspect = image.aspect_ratio || "1:1";
+
+  const img = document.createElement("img");
+  img.className = "image-preview";
+  img.src = apiUrl(image.image_url);
+  img.alt = image.prompt || "Generated image";
+  img.loading = "lazy";
+  wrapper.append(img);
+
+  const meta = document.createElement("div");
+  meta.className = "image-meta";
+  const badges = document.createElement("div");
+  badges.className = "image-badges";
+
+  const aspectBadge = document.createElement("span");
+  aspectBadge.className = "image-badge";
+  const aspectNames = { "1:1": "Square 1:1", "16:9": "Landscape 16:9", "9:16": "Portrait 9:16", "4:3": "Standard 4:3" };
+  aspectBadge.textContent = aspectNames[image.aspect_ratio] || image.aspect_ratio || "1:1";
+
+  const modelBadge = document.createElement("span");
+  modelBadge.className = "image-badge";
+  modelBadge.textContent = (image.model || "FLUX").toUpperCase();
+
+  badges.append(aspectBadge, modelBadge);
+  meta.append(badges);
+
+  const actions = document.createElement("div");
+  actions.className = "image-actions";
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.className = "image-btn image-download-btn";
+  downloadBtn.type = "button";
+  downloadBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v12m0 0 4-4m-4 4-4-4M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Download`;
+  downloadBtn.addEventListener("click", async () => {
+    try {
+      const resp = await apiFetch(image.image_url);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      const ext = blob.type.includes("png") ? "png" : "jpg";
+      a.download = `luma-image-${image.id || Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      showToast("Image downloaded successfully.");
+    } catch {
+      window.open(apiUrl(image.image_url), "_blank");
+    }
+  });
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "image-btn image-copy-btn";
+  copyBtn.type = "button";
+  copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.6"/></svg> Copy prompt`;
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(image.prompt);
+      showToast("Prompt copied to clipboard.");
+    } catch {
+      showToast("Clipboard access is unavailable in this browser.");
+    }
+  });
+
+  const retryBtn = document.createElement("button");
+  retryBtn.className = "image-btn image-retry-btn";
+  retryBtn.type = "button";
+  retryBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12A8 8 0 1 1 12 4c2.5 0 4.7 1.1 6.2 2.9L20 8M20 3v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Retry`;
+  retryBtn.addEventListener("click", () => {
+    sendMessage(image.prompt, null, { forceImage: true, aspect: image.aspect_ratio });
+  });
+
+  actions.append(downloadBtn, copyBtn, retryBtn);
+  card.append(wrapper, meta, actions);
+  return card;
+}
+
+function createImageSkeleton() {
+  const card = document.createElement("div");
+  card.className = "image-card-loading";
+  const skeleton = document.createElement("div");
+  skeleton.className = "image-skeleton";
+
+  const spinner = document.createElement("span");
+  spinner.className = "image-spinner";
+
+  const text = document.createElement("span");
+  text.className = "image-loading-text";
+  text.textContent = "Generating image with Luma AI…";
+
+  skeleton.append(spinner, text);
+  card.append(skeleton);
+  return card;
+}
+
+async function sendMessage(text = messageInput.value.trim(), retryMessageId = null, options = {}) {
   if ((!text && !retryMessageId) || activeGeneration) return;
   const chat = currentChat();
   let userMessage;
@@ -737,10 +900,18 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
   }
   chat.updatedAt = Date.now();
   if (!conversations.some((conversation) => conversation.id === chat.id)) conversations.unshift(chat);
+
+  const intent = detectImageIntent(text);
+  const shouldGenerateImage = Boolean(options.forceImage || isImageMode || intent.isImage);
+  const imageAspect = options.aspect || (isImageMode ? (aspectRatioSelect?.value || "1:1") : intent.aspect);
+  const imagePrompt = (intent.isImage ? intent.prompt : text) || text;
+
   const assistant = {
     id: makeId(),
     role: "assistant",
-    content: "",
+    content: shouldGenerateImage ? "Generating image with Luma AI…" : "",
+    isImage: shouldGenerateImage,
+    image: null,
     status: "streaming",
     error: "",
     createdAt: Date.now(),
@@ -755,6 +926,53 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
   const controller = new AbortController();
   activeGeneration = { controller, chatId: chat.id, assistantId: assistant.id };
   updateGenerationControls();
+
+  if (shouldGenerateImage) {
+    try {
+      const response = await apiFetch("/api/image/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: imagePrompt,
+          aspect_ratio: imageAspect,
+        }),
+        signal: controller.signal,
+      });
+      if (response.status === 401) {
+        if (authenticatedUser) handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.detail || "Failed to generate image. Please try again.");
+      }
+      const data = await response.json();
+      assistant.content = "Here is your generated image.";
+      assistant.image = data;
+      assistant.status = "complete";
+      chat.updatedAt = Date.now();
+      persist();
+      if (currentConversation.id === chat.id) {
+        renderConversation({ scroll: true });
+        renderHistory();
+      }
+    } catch (error) {
+      assistant.status = "failed";
+      assistant.error = error.name === "AbortError"
+        ? "Image generation stopped."
+        : error.message || "Failed to generate image.";
+      chat.updatedAt = Date.now();
+      persist();
+      if (currentConversation.id === chat.id) {
+        renderConversation({ scroll: true });
+      }
+    } finally {
+      if (activeGeneration?.assistantId === assistant.id) activeGeneration = null;
+      updateGenerationControls();
+    }
+    return;
+  }
+
   try {
     const candidates = chat.messages
       .filter((message) => message.id !== assistant.id && message.status === "complete")
@@ -790,6 +1008,11 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
     await readEventStream(response.body, (event, payload) => {
       if (event === "token" && typeof payload.text === "string") {
         assistant.content += payload.text;
+        updateAssistantMessage(chat, assistant);
+        persistSoon();
+      } else if (event === "image" && payload && typeof payload.image_url === "string") {
+        assistant.image = payload;
+        assistant.isImage = true;
         updateAssistantMessage(chat, assistant);
         persistSoon();
       } else if (event === "error") {
@@ -1394,6 +1617,19 @@ messageInput.addEventListener("keydown", (event) => {
     composerForm.requestSubmit();
   }
 });
+
+if (imageModeToggle) {
+  imageModeToggle.addEventListener("click", () => {
+    isImageMode = !isImageMode;
+    updateImageModeUi();
+  });
+}
+if (closeImageMode) {
+  closeImageMode.addEventListener("click", () => {
+    isImageMode = false;
+    updateImageModeUi();
+  });
+}
 
 function stopGeneration() {
   activeGeneration?.controller.abort();

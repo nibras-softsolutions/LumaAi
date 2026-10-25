@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import auth
 import main
+import tools
 
 
 class StubModel:
@@ -55,6 +56,8 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.original_llm = main.llm
         self.original_ai_provider = main.AI_PROVIDER
         self.original_model = main.MODEL
+        self.original_image_provider = main.image_provider
+        tools.rate_limiter._requests.clear()
         main.AI_PROVIDER = "ollama"
         main.MODEL = "llama3.2"
         self.original_engine = auth.engine
@@ -95,6 +98,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         main.llm = self.original_llm
         main.AI_PROVIDER = self.original_ai_provider
         main.MODEL = self.original_model
+        main.image_provider = self.original_image_provider
         await self.client.aclose()
         auth.engine = self.original_engine
         auth.SessionFactory = self.original_session_factory
@@ -622,6 +626,175 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             async for chunk in model.astream(messages):
                 chunks.append(chunk.content)
             self.assertEqual(chunks, ["The second law ", "of thermodynamics states..."])
+
+    async def test_detect_image_prompt_intent(self):
+        # Must detect required prompts from objective
+        p1 = "Generate a premium minimalist website landing page concept."
+        p2 = "Create a realistic futuristic city at sunset."
+        p3 = "Design a modern app icon using off-white, white, and black."
+        p4 = "Generate a cinematic landscape in 16:9 format."
+        p5 = "Draw a cute red panda drinking coffee in a cafe"
+
+        self.assertTrue(tools.detect_image_prompt(p1)[0])
+        self.assertTrue(tools.detect_image_prompt(p2)[0])
+        self.assertTrue(tools.detect_image_prompt(p3)[0])
+        is_p4, clean_p4, aspect_p4 = tools.detect_image_prompt(p4)
+        self.assertTrue(is_p4)
+        self.assertEqual(aspect_p4, "16:9")
+        self.assertTrue(tools.detect_image_prompt(p5)[0])
+
+        # Must not falsely detect normal questions or code requests
+        self.assertFalse(tools.detect_image_prompt("What is image generation?")[0])
+        self.assertFalse(tools.detect_image_prompt("Generate a python function to resize an image")[0])
+        self.assertFalse(tools.detect_image_prompt("Create a modern login form in HTML and CSS")[0])
+        self.assertFalse(tools.detect_image_prompt("Explain how diffusion models work")[0])
+
+    async def test_image_generation_success_mocked(self):
+        mock_provider = tools.MockImageProvider()
+        main.image_provider = mock_provider
+
+        response = await self.client.post(
+            "/api/image/generate",
+            json={
+                "prompt": "a serene minimalist Japanese zen garden with stones",
+                "aspect_ratio": "16:9",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("id", data)
+        self.assertEqual(data["aspect_ratio"], "16:9")
+        self.assertEqual(data["width"], 1280)
+        self.assertEqual(data["height"], 720)
+        self.assertEqual(data["provider"], "mock")
+        self.assertTrue(data["image_url"].startswith("/api/image/view/"))
+
+        # Verify image retrieval endpoint
+        img_resp = await self.client.get(data["image_url"])
+        self.assertEqual(img_resp.status_code, 200)
+        self.assertEqual(img_resp.headers["content-type"], "image/png")
+        self.assertEqual(img_resp.content, tools.MockImageProvider.TINY_PNG)
+
+    async def test_image_generation_unauthenticated(self):
+        unauth_client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=main.app),
+            base_url="http://test",
+        )
+        try:
+            response = await unauth_client.post(
+                "/api/image/generate",
+                json={"prompt": "futuristic city", "aspect_ratio": "1:1"},
+            )
+            self.assertEqual(response.status_code, 401)
+        finally:
+            await unauth_client.aclose()
+
+    async def test_image_generation_invalid_prompt(self):
+        # Empty prompt
+        resp = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "   ", "aspect_ratio": "1:1"},
+        )
+        self.assertEqual(resp.status_code, 422)
+
+        # Exceeds max length
+        resp_long = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "x" * 1001, "aspect_ratio": "1:1"},
+        )
+        self.assertEqual(resp_long.status_code, 422)
+
+    async def test_image_generation_invalid_aspect_ratio(self):
+        resp = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "valid prompt", "aspect_ratio": "21:9"},
+        )
+        self.assertEqual(resp.status_code, 422)
+
+    async def test_image_generation_provider_timeout(self):
+        main.image_provider = tools.MockImageProvider(should_fail=True, fail_type="timeout")
+        resp = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "a cinematic skyline", "aspect_ratio": "1:1"},
+        )
+        self.assertEqual(resp.status_code, 504)
+        self.assertIn("timeout", resp.json()["detail"].lower())
+
+    async def test_image_generation_provider_unavailable(self):
+        main.image_provider = tools.MockImageProvider(should_fail=True, fail_type="error")
+        resp = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "a cinematic skyline", "aspect_ratio": "1:1"},
+        )
+        self.assertEqual(resp.status_code, 503)
+        self.assertIn("unavailable", resp.json()["detail"].lower())
+
+    async def test_huggingface_missing_api_key(self):
+        hf_provider = tools.HuggingFaceImageProvider(api_key="")
+        with self.assertRaises(tools.ProviderUnavailableError):
+            await hf_provider.generate_image("a testing prompt")
+
+    async def test_image_generation_rate_limiting(self):
+        main.image_provider = tools.MockImageProvider()
+        # Reset limiter for this test
+        tools.rate_limiter._requests["test-user-id"] = []
+        for _ in range(10):
+            allowed = await tools.rate_limiter.is_allowed("test-user-id")
+            self.assertTrue(allowed)
+        # 11th request must be blocked
+        allowed_11th = await tools.rate_limiter.is_allowed("test-user-id")
+        self.assertFalse(allowed_11th)
+
+        # Generating an image when rate-limited returns HTTP 429
+        resp = await self.client.post(
+            "/api/image/generate",
+            json={"prompt": "blocked prompt", "aspect_ratio": "1:1"},
+        )
+        self.assertEqual(resp.status_code, 429)
+
+    async def test_chat_stream_with_image_intent(self):
+        main.image_provider = tools.MockImageProvider()
+        tools.rate_limiter._requests["test-user-id"] = []
+
+        response = await self.client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Generate a cinematic landscape in 16:9 format."}
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "text/event-stream; charset=utf-8")
+        text = response.text
+        self.assertIn("event: image", text)
+        self.assertIn('"aspect_ratio": "16:9"', text)
+        self.assertIn("Here is your generated image.", text)
+        self.assertIn("event: done", text)
+
+    async def test_chat_stream_normal_text_chat_unaffected(self):
+        main.llm = StubModel(["Quantum ", "computing ", "uses qubits."])
+        response = await self.client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Explain how quantum computers work."}
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        text = response.text
+        self.assertNotIn("event: image", text)
+        self.assertIn("Quantum ", text)
+        self.assertIn("computing ", text)
+        self.assertIn("uses qubits.", text)
+        self.assertIn("event: done", text)
+
+    async def test_image_proxy_security(self):
+        # Disallow arbitrary external hosts
+        bad_resp = await self.client.get("/api/image/proxy?url=https://attacker-domain.com/evil.jpg")
+        self.assertEqual(bad_resp.status_code, 400)
+        self.assertIn("Disallowed image host", bad_resp.json()["detail"])
 
 
 if __name__ == "__main__":

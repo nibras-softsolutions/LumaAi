@@ -213,10 +213,26 @@
         </section>
 
         <footer class="composer-area">
+          <div class="composer-toolbar" id="composerToolbar" hidden>
+            <div class="composer-pill active">
+              <svg viewBox="0 0 24 24" fill="none" class="pill-icon" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Image Mode</span>
+              <button class="pill-close" id="closeImageMode" type="button" aria-label="Exit image mode">&times;</button>
+            </div>
+            <div class="aspect-selector" id="aspectSelector">
+              <label for="aspectRatioSelect" class="sr-only">Aspect Ratio</label>
+              <select id="aspectRatioSelect" aria-label="Aspect Ratio">
+                <option value="1:1" selected>Square (1:1)</option>
+                <option value="16:9">Landscape (16:9)</option>
+                <option value="9:16">Portrait (9:16)</option>
+                <option value="4:3">Standard (4:3)</option>
+              </select>
+            </div>
+          </div>
           <form class="composer" id="composerForm">
             <label class="sr-only" for="messageInput">Message Luma AI</label>
-            <button class="composer-attachment" type="button" disabled aria-label="Attachments are not available" title="Attachments are not available in this version">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m8.5 12.5 6.2-6.2a3 3 0 0 1 4.2 4.2l-8.4 8.4a5 5 0 0 1-7.1-7.1l8-8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <button class="composer-tool-btn" id="imageModeToggle" type="button" aria-label="Generate Image" title="Generate an image (Toggle Image Mode)">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <div class="composer-input-wrap">
               <textarea id="messageInput" rows="1" maxlength="12000" placeholder="Type your message..." enterkeyhint="send"></textarea>

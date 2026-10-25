@@ -5,14 +5,18 @@ import json
 import logging
 import os
 import re
+import secrets
+import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
+from uuid import uuid4
 
 import bleach
 import httpx
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -31,6 +35,18 @@ from auth import (
     initialize_database,
     require_user,
     router as auth_router,
+)
+from tools import (
+    ASPECT_RATIOS,
+    ImageGenerateRequest,
+    ImageGenerateResponse,
+    ImageGenerationError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+    detect_image_prompt,
+    image_cache,
+    image_provider,
+    rate_limiter,
 )
 
 
@@ -324,6 +340,56 @@ async def stream_response(
         yield _sse("error", {"message": _safe_error(exc)})
 
 
+async def stream_image_response(
+    user_id: str,
+    prompt: str,
+    aspect_ratio: str,
+) -> AsyncIterator[str]:
+    if not await rate_limiter.is_allowed(user_id):
+        yield _sse(
+            "error",
+            {"message": "Rate limit exceeded. Please wait a moment before generating another image."},
+        )
+        return
+    try:
+        image_bytes, content_type = await image_provider.generate_image(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+        )
+        image_id = str(uuid4())
+        actual_seed = secrets.randbelow(1_000_000)
+        await image_cache.put(
+            image_id=image_id,
+            data=image_bytes,
+            content_type=content_type,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            seed=actual_seed,
+        )
+        width, height = ASPECT_RATIOS.get(aspect_ratio, (1024, 1024))
+        image_payload = {
+            "id": image_id,
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "image_url": f"/api/image/view/{image_id}",
+            "width": width,
+            "height": height,
+            "provider": image_provider.name,
+            "model": image_provider.model_name,
+            "created_at": int(time.time() * 1000),
+        }
+        yield f"event: image\ndata: {json.dumps(image_payload, ensure_ascii=False)}\n\n"
+        yield _sse("token", {"text": "Here is your generated image."})
+        yield _sse("done", {})
+    except ProviderTimeoutError as exc:
+        yield _sse("error", {"message": str(exc)})
+    except ProviderUnavailableError as exc:
+        yield _sse("error", {"message": str(exc)})
+    except Exception:
+        logger.exception("Image generation streaming failed")
+        yield _sse("error", {"message": "Failed to generate image. Please try again."})
+
+
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
@@ -387,8 +453,20 @@ async def chat_stream(
     request: ChatRequest,
     _user: User = Depends(require_user),
 ) -> StreamingResponse:
-    messages = _to_langchain_messages(request.messages)
     latest_user_message = request.messages[-1]
+    if latest_user_message.role == "user":
+        is_img, clean_prompt, aspect_ratio = detect_image_prompt(latest_user_message.content)
+        if is_img:
+            return StreamingResponse(
+                stream_image_response(_user.id, clean_prompt, aspect_ratio),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+    messages = _to_langchain_messages(request.messages)
     if latest_user_message.role == "user" and _requests_downloadable_code(
         latest_user_message.content
     ):
@@ -401,6 +479,100 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/api/image/generate", response_model=ImageGenerateResponse)
+async def generate_image_endpoint(
+    req: ImageGenerateRequest,
+    user: User = Depends(require_user),
+) -> ImageGenerateResponse:
+    if not await rate_limiter.is_allowed(user.id):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait a moment before generating another image.",
+        )
+    try:
+        image_bytes, content_type = await image_provider.generate_image(
+            prompt=req.prompt,
+            aspect_ratio=req.aspect_ratio,
+            seed=req.seed,
+        )
+    except ProviderTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc))
+    except ProviderUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        logger.exception("Image generation failed")
+        raise HTTPException(status_code=500, detail="Failed to generate image. Please try again.")
+
+    image_id = str(uuid4())
+    actual_seed = req.seed if req.seed is not None else secrets.randbelow(1_000_000)
+    await image_cache.put(
+        image_id=image_id,
+        data=image_bytes,
+        content_type=content_type,
+        prompt=req.prompt,
+        aspect_ratio=req.aspect_ratio,
+        seed=actual_seed,
+    )
+    width, height = ASPECT_RATIOS.get(req.aspect_ratio, (1024, 1024))
+    return ImageGenerateResponse(
+        id=image_id,
+        prompt=req.prompt,
+        aspect_ratio=req.aspect_ratio,
+        image_url=f"/api/image/view/{image_id}",
+        width=width,
+        height=height,
+        provider=image_provider.name,
+        model=image_provider.model_name,
+        created_at=int(time.time() * 1000),
+    )
+
+
+@app.get("/api/image/view/{image_id}", include_in_schema=False)
+async def view_image(image_id: str) -> Response:
+    cached = await image_cache.get(image_id)
+    if not cached:
+        raise HTTPException(status_code=404, detail="Image not found or expired.")
+    ext = "png" if "png" in cached.content_type else "jpg"
+    return Response(
+        content=cached.data,
+        media_type=cached.content_type,
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Disposition": f'inline; filename="luma-{image_id}.{ext}"',
+        },
+    )
+
+
+ALLOWED_IMAGE_HOSTS = {
+    "image.pollinations.ai",
+    "pollinations.ai",
+    "127.0.0.1",
+    "localhost",
+}
+
+
+@app.get("/api/image/proxy")
+async def proxy_image(url: str, _user: User = Depends(require_user)) -> Response:
+    parsed = urlparse(url)
+    if parsed.hostname not in ALLOWED_IMAGE_HOSTS:
+        raise HTTPException(status_code=400, detail="Disallowed image host.")
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            resp = await client.get(url, follow_redirects=True)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail="Failed to fetch image.")
+            content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
+            return Response(
+                content=resp.content,
+                media_type=content_type,
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Image proxy timed out.")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Failed to proxy image.")
 
 
 @app.post("/api/markdown")
