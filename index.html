@@ -234,6 +234,9 @@
             <button class="composer-tool-btn" id="imageModeToggle" type="button" aria-label="Generate Image" title="Generate an image (Toggle Image Mode)">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <button class="composer-tool-btn" id="voiceModeButton" type="button" aria-label="Start Voice Conversation" title="Start voice conversation">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="1.7"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <div class="composer-input-wrap">
               <textarea id="messageInput" rows="1" maxlength="12000" placeholder="Type your message..." enterkeyhint="send"></textarea>
             </div>
@@ -252,6 +255,51 @@
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="voice-overlay" id="voiceOverlay" hidden aria-modal="true" role="dialog" aria-label="Voice Conversation">
+      <div class="voice-modal">
+        <header class="voice-header">
+          <div class="voice-branding">
+            <span class="voice-status-dot" id="voiceStatusDot" aria-hidden="true"></span>
+            <span class="voice-status-label" id="voiceStatusLabel">Listening…</span>
+          </div>
+          <div class="voice-header-actions">
+            <button class="icon-button voice-header-btn" id="voiceMuteBtn" type="button" aria-label="Mute microphone" title="Mute microphone">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="1.7"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-button voice-header-btn" id="voiceExitBtn" type="button" aria-label="Exit voice mode" title="Exit voice mode (Esc)">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="voice-body">
+          <div class="voice-visualizer-wrap" id="voiceVisualizerWrap" role="button" tabindex="0" aria-label="Tap to interrupt or speak">
+            <div class="voice-ripple ripple-3" aria-hidden="true"></div>
+            <div class="voice-ripple ripple-2" aria-hidden="true"></div>
+            <div class="voice-ripple ripple-1" aria-hidden="true"></div>
+            <div class="voice-orb" id="voiceOrb" aria-hidden="true">
+              <span class="voice-orb-core"></span>
+            </div>
+          </div>
+
+          <div class="voice-transcripts" id="voiceTranscripts" aria-live="polite">
+            <p class="voice-user-text" id="voiceUserText">Listening…</p>
+            <p class="voice-ai-text" id="voiceAiText"></p>
+          </div>
+        </main>
+
+        <footer class="voice-footer">
+          <div class="voice-footer-controls">
+            <button class="voice-action-pill" id="voiceActionBtn" type="button">
+              <span class="voice-action-dot" aria-hidden="true"></span>
+              <span id="voiceActionText">Listening…</span>
+            </button>
+          </div>
+          <p class="voice-footer-hint">Speak naturally. Tap the orb or press Space to interrupt anytime.</p>
+        </footer>
+      </div>
+    </div>
 
     <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
       <div class="dialog-header">

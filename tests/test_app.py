@@ -1,8 +1,9 @@
 import asyncio
-import secrets
 import json
+import os
+import secrets
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
@@ -795,6 +796,76 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         bad_resp = await self.client.get("/api/image/proxy?url=https://attacker-domain.com/evil.jpg")
         self.assertEqual(bad_resp.status_code, 400)
         self.assertIn("Disallowed image host", bad_resp.json()["detail"])
+
+    async def test_voice_transcribe_unauthenticated_rejected(self):
+        self.client.cookies.clear()
+        resp = await self.client.post(
+            "/api/voice/transcribe",
+            content=b"dummy audio content that is long enough to pass length checks",
+            headers={"Content-Type": "audio/webm"},
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    async def test_voice_transcribe_empty_or_short_body_rejected(self):
+        resp_empty = await self.client.post(
+            "/api/voice/transcribe",
+            content=b"",
+            headers={"Content-Type": "audio/webm"},
+        )
+        self.assertEqual(resp_empty.status_code, 400)
+        self.assertIn("Empty audio", resp_empty.json()["detail"])
+
+        resp_short = await self.client.post(
+            "/api/voice/transcribe",
+            content=b"too short",
+            headers={"Content-Type": "audio/webm"},
+        )
+        self.assertEqual(resp_short.status_code, 400)
+        self.assertIn("too short", resp_short.json()["detail"])
+
+    async def test_voice_transcribe_success(self):
+        audio_payload = b"RIFF" + b"\x00" * 200  # valid length > 100 bytes
+        mock_response = httpx.Response(
+            200,
+            json={"text": "Hello Luma AI, this is a real-time voice test."},
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions"),
+        )
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "mock-test-key"}):
+            with patch("main.httpx.AsyncClient", return_value=mock_client):
+                resp = await self.client.post(
+                    "/api/voice/transcribe",
+                    content=audio_payload,
+                    headers={"Content-Type": "audio/webm"},
+                )
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.json(), {"text": "Hello Luma AI, this is a real-time voice test."})
+
+    async def test_voice_transcribe_rate_limit(self):
+        audio_payload = b"RIFF" + b"\x00" * 200
+        mock_response = httpx.Response(
+            429,
+            json={"error": {"message": "Rate limit reached"}},
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions"),
+        )
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "mock-test-key"}):
+            with patch("main.httpx.AsyncClient", return_value=mock_client):
+                resp = await self.client.post(
+                    "/api/voice/transcribe",
+                    content=audio_payload,
+                    headers={"Content-Type": "audio/webm"},
+                )
+                self.assertEqual(resp.status_code, 429)
+                self.assertIn("rate limit exceeded", resp.json()["detail"].lower())
 
 
 if __name__ == "__main__":

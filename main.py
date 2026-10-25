@@ -575,6 +575,77 @@ async def proxy_image(url: str, _user: User = Depends(require_user)) -> Response
         raise HTTPException(status_code=502, detail="Failed to proxy image.")
 
 
+MAX_VOICE_AUDIO_SIZE = 25 * 1024 * 1024  # 25 MB max
+
+
+@app.post("/api/voice/transcribe")
+async def transcribe_voice(
+    request: Request,
+    _user: User = Depends(require_user),
+) -> dict[str, str]:
+    content_type = request.headers.get("content-type", "audio/webm").split(";")[0]
+    audio_bytes = await request.body()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Empty audio recording.")
+    if len(audio_bytes) > MAX_VOICE_AUDIO_SIZE:
+        raise HTTPException(status_code=413, detail="Audio recording is too large (max 25MB).")
+    if len(audio_bytes) < 100:
+        raise HTTPException(status_code=400, detail="Audio recording is too short or silent.")
+
+    whisper_api_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or HOSTED_API_KEY
+    whisper_base_url = (
+        "https://api.groq.com/openai/v1"
+        if os.getenv("GROQ_API_KEY")
+        else (HOSTED_BASE_URL or "https://api.openai.com/v1")
+    )
+    model_name = "whisper-large-v3-turbo" if "groq" in whisper_base_url else "whisper-1"
+
+    if not whisper_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice transcription service is not configured.",
+        )
+
+    ext = "webm"
+    if "wav" in content_type:
+        ext = "wav"
+    elif "ogg" in content_type:
+        ext = "ogg"
+    elif "mp4" in content_type or "m4a" in content_type:
+        ext = "m4a"
+
+    files = {"file": (f"recording.{ext}", audio_bytes, content_type)}
+    data = {"model": model_name}
+    headers = {"Authorization": f"Bearer {whisper_api_key}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            resp = await client.post(
+                f"{whisper_base_url.rstrip('/')}/audio/transcriptions",
+                headers=headers,
+                files=files,
+                data=data,
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                text = result.get("text", "").strip()
+                return {"text": text}
+            if resp.status_code == 429:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Transcription rate limit exceeded. Please wait a moment.",
+                )
+            logger.warning("Whisper transcription error: %s - %s", resp.status_code, resp.text)
+            raise HTTPException(status_code=502, detail="Transcription provider error.")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Transcription timed out.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Voice transcription failed")
+        raise HTTPException(status_code=500, detail="Voice transcription failed.")
+
+
 @app.post("/api/markdown")
 async def render_markdown(
     request: MarkdownRequest,
