@@ -106,25 +106,25 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("GROQ_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
-if not OPENAI_BASE_URL and AI_PROVIDER == "groq":
-    OPENAI_BASE_URL = "https://api.groq.com/openai/v1"
-elif not OPENAI_BASE_URL and OPENAI_API_KEY:
-    OPENAI_BASE_URL = "https://api.openai.com/v1"
+if AI_PROVIDER == "groq":
+    HOSTED_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+    HOSTED_BASE_URL = os.getenv("OPENAI_BASE_URL") or "https://api.groq.com/openai/v1"
+    HOSTED_MODEL = os.getenv("OPENAI_MODEL") or "openai/gpt-oss-120b"
+elif AI_PROVIDER in {"openai", "openrouter", "together"}:
+    HOSTED_API_KEY = os.getenv("OPENAI_API_KEY")
+    HOSTED_BASE_URL = os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    HOSTED_MODEL = os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+else:
+    HOSTED_API_KEY = None
+    HOSTED_BASE_URL = None
+    HOSTED_MODEL = None
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL")
-if not OPENAI_MODEL and AI_PROVIDER == "groq":
-    OPENAI_MODEL = "llama-3.2-3b-preview"
-elif not OPENAI_MODEL:
-    OPENAI_MODEL = "llama3.2"
-
-if AI_PROVIDER in {"openai", "groq", "openrouter", "together"} and OPENAI_API_KEY and OPENAI_BASE_URL:
-    MODEL = OPENAI_MODEL
+if HOSTED_API_KEY and HOSTED_BASE_URL:
+    MODEL = HOSTED_MODEL
     llm = OpenAICompatibleModel(
         model=MODEL,
-        base_url=OPENAI_BASE_URL,
-        api_key=OPENAI_API_KEY,
+        base_url=HOSTED_BASE_URL,
+        api_key=HOSTED_API_KEY,
     )
 else:
     MODEL = OLLAMA_MODEL
@@ -336,11 +336,11 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/health/ai")
 async def ai_health(_user: User = Depends(require_user)) -> dict[str, str | bool]:
-    if AI_PROVIDER in {"openai", "groq", "openrouter", "together"} and OPENAI_API_KEY and OPENAI_BASE_URL:
+    if AI_PROVIDER in {"openai", "groq", "openrouter", "together"} and HOSTED_API_KEY and HOSTED_BASE_URL:
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
-                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-                resp = await client.get(f"{OPENAI_BASE_URL.rstrip('/')}/models", headers=headers)
+                headers = {"Authorization": f"Bearer {HOSTED_API_KEY}"}
+                resp = await client.get(f"{HOSTED_BASE_URL.rstrip('/')}/models", headers=headers)
                 connected = resp.status_code == 200
                 return {
                     "status": "ok" if connected else "unavailable",

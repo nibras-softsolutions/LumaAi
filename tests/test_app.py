@@ -53,6 +53,10 @@ class StubOllamaClient:
 class AppTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.original_llm = main.llm
+        self.original_ai_provider = main.AI_PROVIDER
+        self.original_model = main.MODEL
+        main.AI_PROVIDER = "ollama"
+        main.MODEL = "llama3.2"
         self.original_engine = auth.engine
         self.original_session_factory = auth.SessionFactory
         self.engine = create_async_engine("sqlite+aiosqlite://")
@@ -89,6 +93,8 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         main.llm = self.original_llm
+        main.AI_PROVIDER = self.original_ai_provider
+        main.MODEL = self.original_model
         await self.client.aclose()
         auth.engine = self.original_engine
         auth.SessionFactory = self.original_session_factory
