@@ -1373,6 +1373,25 @@ body { padding: 16px; }
   text-align: center;
 }
 
+.voice-privacy-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: #a39f97;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.voice-privacy-notice .privacy-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: #8f8b83;
+}
+
 @media (max-width: 600px) {
   .voice-modal {
     min-height: 460px;

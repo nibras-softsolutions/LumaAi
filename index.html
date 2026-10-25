@@ -264,6 +264,9 @@
             <span class="voice-status-label" id="voiceStatusLabel">Listening…</span>
           </div>
           <div class="voice-header-actions">
+            <button class="icon-button voice-header-btn" id="voiceReplayBtn" type="button" aria-label="Replay response" title="Replay last response" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <button class="icon-button voice-header-btn" id="voiceMuteBtn" type="button" aria-label="Mute microphone" title="Mute microphone">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="1.7"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -297,6 +300,10 @@
             </button>
           </div>
           <p class="voice-footer-hint">Speak naturally. Tap the orb or press Space to interrupt anytime.</p>
+          <p class="voice-privacy-notice">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="privacy-icon"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            Microphone audio is transcribed with Groq Whisper when needed. Audio recordings are never stored.
+          </p>
         </footer>
       </div>
     </div>

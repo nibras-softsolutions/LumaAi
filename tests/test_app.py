@@ -59,6 +59,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.original_model = main.MODEL
         self.original_image_provider = main.image_provider
         tools.rate_limiter._requests.clear()
+        main.voice_rate_limiter._requests.clear()
         main.AI_PROVIDER = "ollama"
         main.MODEL = "llama3.2"
         self.original_engine = auth.engine
@@ -866,6 +867,120 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(resp.status_code, 429)
                 self.assertIn("rate limit exceeded", resp.json()["detail"].lower())
+
+    async def test_voice_transcribe_supported_formats(self):
+        formats = [
+            ("audio/wav", "wav"),
+            ("audio/ogg", "ogg"),
+            ("audio/mp4", "m4a"),
+            ("audio/mpeg", "mp3"),
+            ("audio/flac", "flac"),
+        ]
+        mock_response = httpx.Response(
+            200,
+            json={"text": "Recognized format."},
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions"),
+        )
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "mock-test-key"}):
+            with patch("main.httpx.AsyncClient", return_value=mock_client):
+                for mime_type, _ext in formats:
+                    resp = await self.client.post(
+                        "/api/voice/transcribe",
+                        content=b"HEADER" + b"\x00" * 200,
+                        headers={"Content-Type": mime_type},
+                    )
+                    self.assertEqual(resp.status_code, 200)
+                    self.assertEqual(resp.json(), {"text": "Recognized format."})
+
+    async def test_voice_transcribe_provider_timeout_and_error(self):
+        # 1. Timeout -> 504
+        mock_client_timeout = AsyncMock()
+        mock_client_timeout.post.side_effect = httpx.TimeoutException("Timed out")
+        mock_client_timeout.__aenter__.return_value = mock_client_timeout
+        mock_client_timeout.__aexit__.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "mock-test-key"}):
+            with patch("main.httpx.AsyncClient", return_value=mock_client_timeout):
+                resp = await self.client.post(
+                    "/api/voice/transcribe",
+                    content=b"DATA" + b"\x00" * 150,
+                    headers={"Content-Type": "audio/webm"},
+                )
+                self.assertEqual(resp.status_code, 504)
+                self.assertIn("timed out", resp.json()["detail"].lower())
+
+        # 2. Upstream 500 error -> 502
+        mock_500_resp = httpx.Response(
+            500,
+            text="Internal Provider Error",
+            request=httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions"),
+        )
+        mock_client_500 = AsyncMock()
+        mock_client_500.post.return_value = mock_500_resp
+        mock_client_500.__aenter__.return_value = mock_client_500
+        mock_client_500.__aexit__.return_value = None
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "mock-test-key"}):
+            with patch("main.httpx.AsyncClient", return_value=mock_client_500):
+                resp = await self.client.post(
+                    "/api/voice/transcribe",
+                    content=b"DATA" + b"\x00" * 150,
+                    headers={"Content-Type": "audio/webm"},
+                )
+                self.assertEqual(resp.status_code, 502)
+                self.assertIn("provider error", resp.json()["detail"].lower())
+
+    async def test_voice_local_user_rate_limiter(self):
+        # Local user rate limiter allows up to 15 per minute
+        for _ in range(15):
+            await main.voice_rate_limiter.is_allowed("test-user-id")
+
+        resp = await self.client.post(
+            "/api/voice/transcribe",
+            content=b"DATA" + b"\x00" * 150,
+            headers={"Content-Type": "audio/webm"},
+        )
+        self.assertEqual(resp.status_code, 429)
+        self.assertIn("rate limit exceeded", resp.json()["detail"].lower())
+
+    async def test_voice_multi_turn_conversation_stream(self):
+        # Test conversational turns in voice flow with full history retention
+        main.llm = StubModel(["I am doing great! ", "How can I help you today?"])
+        response = await self.client.post(
+            "/api/chat/stream",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Hello Luma AI"},
+                    {"role": "assistant", "content": "Hello! How are you?"},
+                    {"role": "user", "content": "I am great, how are you?"},
+                ]
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        chunks = response.text
+        self.assertIn("I am doing great! ", chunks)
+        self.assertIn("How can I help you today?", chunks)
+        self.assertIn("event: done", chunks)
+
+    async def test_voice_streaming_cancellation_on_interruption(self):
+        # Simulate interruption: client closes the connection during streaming
+        main.llm = StubModel(["First sentence. ", "Second sentence."], delay=0.05)
+        async with self.client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "Tell me a long story"}]},
+        ) as response:
+            self.assertEqual(response.status_code, 200)
+            async for chunk in response.aiter_text():
+                if "First sentence" in chunk:
+                    # Client interrupts and cancels
+                    break
+        # Closed cleanly without server crash
 
 
 if __name__ == "__main__":

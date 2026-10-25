@@ -1693,6 +1693,7 @@ const voiceStatusDot = document.querySelector("#voiceStatusDot");
 const voiceStatusLabel = document.querySelector("#voiceStatusLabel");
 const voiceMuteBtn = document.querySelector("#voiceMuteBtn");
 const voiceExitBtn = document.querySelector("#voiceExitBtn");
+const voiceReplayBtn = document.querySelector("#voiceReplayBtn");
 const voiceVisualizerWrap = document.querySelector("#voiceVisualizerWrap");
 const voiceOrb = document.querySelector("#voiceOrb");
 const voiceUserText = document.querySelector("#voiceUserText");
@@ -1701,6 +1702,7 @@ const voiceActionBtn = document.querySelector("#voiceActionBtn");
 const voiceActionText = document.querySelector("#voiceActionText");
 
 let voiceState = "closed"; // "closed" | "listening" | "thinking" | "speaking" | "muted"
+let voiceTurnCounter = 0;
 let voiceMediaStream = null;
 let voiceAudioContext = null;
 let voiceAnalyser = null;
@@ -1716,6 +1718,7 @@ let voiceSilenceTimer = 0;
 let voiceFinalTranscript = "";
 let voiceSpeechDetected = false;
 let voiceSilenceStartTime = 0;
+let voiceLastSpokenText = "";
 
 function setVoiceState(newState) {
   voiceState = newState;
@@ -1757,6 +1760,21 @@ function sanitizeForSpeech(rawText) {
     .trim();
 }
 
+function extractNextSentence(buffer) {
+  if (!buffer) return null;
+  const match = buffer.match(/^(.*?[.!?\n])(?:\s+|$)([\s\S]*)$/);
+  if (!match) return null;
+  const candidate = match[1].trim();
+  if (/(?:e\.g|i\.e|vs|mr|mrs|ms|dr|prof)\.$/i.test(candidate)) {
+    return null;
+  }
+  if (candidate.length < 3) return null;
+  return {
+    sentence: candidate,
+    remaining: match[2] || "",
+  };
+}
+
 function getBestVoice() {
   if (!window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices() || [];
@@ -1778,7 +1796,9 @@ function stopVoiceSpeech() {
   }
 }
 
-function playNextVoiceSpeech() {
+function playNextVoiceSpeech(turnId) {
+  if (turnId && turnId !== voiceTurnCounter) return;
+
   if (voiceSpeechQueue.length === 0) {
     voiceIsSpeaking = false;
     if (voiceState === "speaking") {
@@ -1793,7 +1813,7 @@ function playNextVoiceSpeech() {
   setVoiceState("speaking");
   const sentence = voiceSpeechQueue.shift();
   if (!sentence || !sentence.trim()) {
-    playNextVoiceSpeech();
+    playNextVoiceSpeech(turnId);
     return;
   }
 
@@ -1804,34 +1824,40 @@ function playNextVoiceSpeech() {
   utterance.pitch = 1.0;
 
   utterance.onend = () => {
-    playNextVoiceSpeech();
+    if (turnId && turnId !== voiceTurnCounter) return;
+    playNextVoiceSpeech(turnId);
   };
   utterance.onerror = (e) => {
     console.warn("Speech synthesis utterance error:", e);
-    playNextVoiceSpeech();
+    if (turnId && turnId !== voiceTurnCounter) return;
+    playNextVoiceSpeech(turnId);
   };
 
   try {
     window.speechSynthesis.speak(utterance);
   } catch (err) {
     console.warn("Speech synthesis speak error:", err);
-    playNextVoiceSpeech();
+    playNextVoiceSpeech(turnId);
   }
 }
 
-function enqueueVoiceSentence(sentence) {
+function enqueueVoiceSentence(sentence, turnId) {
+  if (turnId && turnId !== voiceTurnCounter) return;
   const clean = sanitizeForSpeech(sentence);
   if (!clean || clean.length < 2) return;
   voiceSpeechQueue.push(clean);
   if (!voiceIsSpeaking) {
-    playNextVoiceSpeech();
+    playNextVoiceSpeech(turnId);
   }
 }
 
 function interruptVoice() {
+  voiceTurnCounter++;
   stopVoiceSpeech();
   if (voiceGenerationController) {
-    voiceGenerationController.abort();
+    try {
+      voiceGenerationController.abort();
+    } catch {}
     voiceGenerationController = null;
   }
   setVoiceState("listening");
@@ -1876,17 +1902,18 @@ async function startVoiceVisualizer(stream) {
         if (ripple1) ripple1.style.transform = `scale(${(scale * 1.05).toFixed(3)})`;
         if (ripple2) ripple2.style.transform = `scale(${(scale * 1.12).toFixed(3)})`;
 
-        // Silence detection for browsers without Web Speech recognition
-        if (!voiceRecognition) {
-          const now = Date.now();
-          if (avg > 18) {
-            voiceSpeechDetected = true;
+        // Silence detection fallback for audio blob transcription
+        const now = Date.now();
+        if (avg > 18) {
+          voiceSpeechDetected = true;
+          voiceSilenceStartTime = 0;
+        } else if (voiceSpeechDetected && avg <= 14) {
+          if (!voiceSilenceStartTime) voiceSilenceStartTime = now;
+          else if (now - voiceSilenceStartTime > 1300) {
+            voiceSpeechDetected = false;
             voiceSilenceStartTime = 0;
-          } else if (voiceSpeechDetected && avg <= 14) {
-            if (!voiceSilenceStartTime) voiceSilenceStartTime = now;
-            else if (now - voiceSilenceStartTime > 1200) {
-              voiceSpeechDetected = false;
-              voiceSilenceStartTime = 0;
+            // If browser SpeechRecognition did not yield a final transcript, fallback to Groq Whisper
+            if (!voiceFinalTranscript.trim()) {
               finalizeAudioBlobRecording();
             }
           }
@@ -2022,7 +2049,7 @@ async function finalizeAudioBlobRecording() {
     return;
   }
 
-  if (voiceUserText) voiceUserText.textContent = "Transcribing audio…";
+  if (voiceUserText) voiceUserText.textContent = "Transcribing with Groq Whisper…";
   setVoiceState("thinking");
 
   try {
@@ -2055,6 +2082,7 @@ async function submitVoiceTurn(userText) {
     return;
   }
 
+  const thisTurn = ++voiceTurnCounter;
   stopVoiceRecording();
   setVoiceState("thinking");
   if (voiceUserText) voiceUserText.textContent = userText;
@@ -2106,6 +2134,8 @@ async function submitVoiceTurn(userText) {
       signal: voiceGenerationController.signal,
     });
 
+    if (thisTurn !== voiceTurnCounter) return;
+
     if (response.status === 401) {
       if (authenticatedUser) handleSessionExpired();
       closeVoiceMode();
@@ -2117,30 +2147,38 @@ async function submitVoiceTurn(userText) {
     }
 
     await readEventStream(response.body, (event, payload) => {
+      if (thisTurn !== voiceTurnCounter) return;
+
       if (event === "token" && typeof payload.text === "string") {
         assistantMessage.content += payload.text;
         if (voiceAiText) voiceAiText.textContent = assistantMessage.content;
         sentenceBuffer += payload.text;
 
-        const sentenceMatch = sentenceBuffer.match(/^(.*?[\.\!\?\n]+)(?:\s+|$)([\s\S]*)$/);
-        if (sentenceMatch) {
-          const finishedSentence = sentenceMatch[1];
-          sentenceBuffer = sentenceMatch[2] || "";
-          enqueueVoiceSentence(finishedSentence);
+        let extracted = extractNextSentence(sentenceBuffer);
+        while (extracted) {
+          sentenceBuffer = extracted.remaining;
+          enqueueVoiceSentence(extracted.sentence, thisTurn);
+          extracted = extractNextSentence(sentenceBuffer);
         }
       } else if (event === "error") {
         throw new Error(payload.message || "Failed to generate response.");
       }
     });
 
+    if (thisTurn !== voiceTurnCounter) return;
+
     if (sentenceBuffer.trim()) {
-      enqueueVoiceSentence(sentenceBuffer);
+      enqueueVoiceSentence(sentenceBuffer, thisTurn);
     }
 
     assistantMessage.status = "complete";
+    voiceLastSpokenText = assistantMessage.content;
+    if (voiceReplayBtn) voiceReplayBtn.hidden = false;
     chat.updatedAt = Date.now();
     persist();
   } catch (err) {
+    if (thisTurn !== voiceTurnCounter) return;
+
     if (err.name === "AbortError") {
       assistantMessage.status = "complete";
     } else {
@@ -2152,14 +2190,16 @@ async function submitVoiceTurn(userText) {
     chat.updatedAt = Date.now();
     persist();
   } finally {
-    if (activeGeneration?.assistantId === assistantMessage.id) {
-      activeGeneration = null;
-    }
-    updateGenerationControls();
-    if (voiceSpeechQueue.length === 0 && !voiceIsSpeaking) {
-      setVoiceState("listening");
-      if (voiceUserText) voiceUserText.textContent = "Listening…";
-      startVoiceListeningCycle();
+    if (thisTurn === voiceTurnCounter) {
+      if (activeGeneration?.assistantId === assistantMessage.id) {
+        activeGeneration = null;
+      }
+      updateGenerationControls();
+      if (voiceSpeechQueue.length === 0 && !voiceIsSpeaking) {
+        setVoiceState("listening");
+        if (voiceUserText) voiceUserText.textContent = "Listening…";
+        startVoiceListeningCycle();
+      }
     }
   }
 }
@@ -2179,6 +2219,7 @@ async function openVoiceMode() {
   if (voiceOverlay) voiceOverlay.hidden = false;
   if (voiceUserText) voiceUserText.textContent = "Requesting microphone permission…";
   if (voiceAiText) voiceAiText.textContent = "";
+  if (voiceReplayBtn) voiceReplayBtn.hidden = !voiceLastSpokenText;
   setVoiceState("listening");
 
   try {
@@ -2251,6 +2292,14 @@ if (voiceExitBtn) {
 }
 if (voiceMuteBtn) {
   voiceMuteBtn.addEventListener("click", toggleVoiceMute);
+}
+if (voiceReplayBtn) {
+  voiceReplayBtn.addEventListener("click", () => {
+    if (voiceLastSpokenText && voiceState !== "speaking") {
+      stopVoiceSpeech();
+      enqueueVoiceSentence(voiceLastSpokenText, ++voiceTurnCounter);
+    }
+  });
 }
 if (voiceVisualizerWrap) {
   voiceVisualizerWrap.addEventListener("click", () => {

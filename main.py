@@ -43,6 +43,7 @@ from tools import (
     ImageGenerationError,
     ProviderTimeoutError,
     ProviderUnavailableError,
+    UserRateLimiter,
     detect_image_prompt,
     image_cache,
     image_provider,
@@ -576,6 +577,22 @@ async def proxy_image(url: str, _user: User = Depends(require_user)) -> Response
 
 
 MAX_VOICE_AUDIO_SIZE = 25 * 1024 * 1024  # 25 MB max
+voice_rate_limiter = UserRateLimiter(max_requests=15, window_seconds=60.0)
+
+SUPPORTED_AUDIO_TYPES: dict[str, str] = {
+    "audio/webm": "webm",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/ogg": "ogg",
+    "audio/vorbis": "ogg",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+}
 
 
 @app.post("/api/voice/transcribe")
@@ -583,7 +600,13 @@ async def transcribe_voice(
     request: Request,
     _user: User = Depends(require_user),
 ) -> dict[str, str]:
-    content_type = request.headers.get("content-type", "audio/webm").split(";")[0]
+    if not await voice_rate_limiter.is_allowed(_user.id):
+        raise HTTPException(
+            status_code=429,
+            detail="Voice transcription rate limit exceeded. Please wait a moment.",
+        )
+
+    content_type = request.headers.get("content-type", "audio/webm").split(";")[0].strip().lower()
     audio_bytes = await request.body()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio recording.")
@@ -606,13 +629,20 @@ async def transcribe_voice(
             detail="Voice transcription service is not configured.",
         )
 
-    ext = "webm"
-    if "wav" in content_type:
-        ext = "wav"
-    elif "ogg" in content_type:
-        ext = "ogg"
-    elif "mp4" in content_type or "m4a" in content_type:
-        ext = "m4a"
+    ext = SUPPORTED_AUDIO_TYPES.get(content_type)
+    if not ext:
+        if "wav" in content_type:
+            ext = "wav"
+        elif "ogg" in content_type:
+            ext = "ogg"
+        elif "mp4" in content_type or "m4a" in content_type:
+            ext = "m4a"
+        elif "mp3" in content_type or "mpeg" in content_type:
+            ext = "mp3"
+        elif "flac" in content_type:
+            ext = "flac"
+        else:
+            ext = "webm"
 
     files = {"file": (f"recording.{ext}", audio_bytes, content_type)}
     data = {"model": model_name}
