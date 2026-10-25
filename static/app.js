@@ -1717,10 +1717,23 @@ let voiceIsGenerationStreaming = false;
 let voiceGenerationController = null;
 let voiceSilenceTimer = 0;
 let voiceCurrentTranscript = "";
+let voiceAmbientRms = 0.005;
 let voiceSpeechDetected = false;
 let voiceSilenceStartTime = 0;
 let voiceLastSpokenText = "";
 let voiceTtsWatchdog = 0;
+let cachedVoices = [];
+
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  try {
+    cachedVoices = window.speechSynthesis.getVoices() || [];
+    window.speechSynthesis.onvoiceschanged = () => {
+      try {
+        cachedVoices = window.speechSynthesis.getVoices() || [];
+      } catch {}
+    };
+  } catch {}
+}
 
 function setVoiceState(newState) {
   voiceState = newState;
@@ -1779,9 +1792,9 @@ function extractNextSentence(buffer) {
 
 function getBestVoice() {
   if (!window.speechSynthesis) return null;
-  const voices = window.speechSynthesis.getVoices() || [];
+  const voices = cachedVoices.length > 0 ? cachedVoices : (window.speechSynthesis.getVoices() || []);
   const preferred = voices.find((v) =>
-    (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Karen")) &&
+    (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Karen") || v.name.includes("Arthur")) &&
     v.lang.startsWith("en")
   );
   if (preferred) return preferred;
@@ -1936,28 +1949,43 @@ async function startVoiceVisualizer(stream) {
         }
         const rms = Math.sqrt(sumSq / timeDomainData.length);
 
-        const scale = 1 + Math.min(rms * 2.2, 0.42);
+        const scale = 1 + Math.min(rms * 4.0, 0.45);
         if (voiceOrb) {
           voiceOrb.style.transform = `scale(${scale.toFixed(3)})`;
         }
         const ripple1 = document.querySelector(".voice-ripple.ripple-1");
         const ripple2 = document.querySelector(".voice-ripple.ripple-2");
-        if (ripple1) ripple1.style.transform = `scale(${(scale * 1.05).toFixed(3)})`;
-        if (ripple2) ripple2.style.transform = `scale(${(scale * 1.12).toFixed(3)})`;
+        if (ripple1) ripple1.style.transform = `scale(${(scale * 1.08).toFixed(3)})`;
+        if (ripple2) ripple2.style.transform = `scale(${(scale * 1.18).toFixed(3)})`;
 
-        // Silence / speech detection via RMS energy
+        // Adaptive noise floor calibration
+        if (!voiceSpeechDetected) {
+          voiceAmbientRms = voiceAmbientRms * 0.95 + rms * 0.05;
+        }
+        const speechThreshold = Math.max(0.006, voiceAmbientRms * 1.55);
+
         const now = Date.now();
-        if (rms > 0.02) {
-          voiceSpeechDetected = true;
+        if (rms > speechThreshold) {
+          if (!voiceSpeechDetected) {
+            voiceSpeechDetected = true;
+            if (voiceUserText && (!voiceCurrentTranscript || voiceUserText.textContent === "Listening…")) {
+              voiceUserText.textContent = "Listening to you speak…";
+            }
+            if (voiceActionText) {
+              voiceActionText.textContent = "Tap to finish";
+            }
+          }
           voiceSilenceStartTime = 0;
-        } else if (voiceSpeechDetected && rms <= 0.018) {
-          if (!voiceSilenceStartTime) voiceSilenceStartTime = now;
-          else if (now - voiceSilenceStartTime > 1200) {
+        } else if (voiceSpeechDetected && rms <= speechThreshold * 1.15) {
+          if (!voiceSilenceStartTime) {
+            voiceSilenceStartTime = now;
+          } else if (now - voiceSilenceStartTime > 1000) {
+            // Conversational pause completed: process input!
             voiceSpeechDetected = false;
             voiceSilenceStartTime = 0;
             if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
               submitVoiceTurn(voiceCurrentTranscript.trim());
-            } else if (voiceAudioChunks.length > 0) {
+            } else {
               finalizeAudioBlobRecording();
             }
           }
@@ -1992,6 +2020,7 @@ function startVoiceListeningCycle() {
   voiceAudioChunks = [];
   voiceSpeechDetected = false;
   voiceSilenceStartTime = 0;
+  if (voiceActionText) voiceActionText.textContent = "Listening…";
 
   // Clean previous recognition instance
   if (voiceRecognition) {
@@ -2040,13 +2069,18 @@ function startVoiceListeningCycle() {
             if (voiceState === "listening" && voiceCurrentTranscript.trim()) {
               submitVoiceTurn(voiceCurrentTranscript.trim());
             }
-          }, final ? 800 : 1100);
+          }, final ? 700 : 1000);
         }
       };
 
       voiceRecognition.onerror = (e) => {
         if (e.error === "no-speech") return;
-        console.warn("SpeechRecognition error:", e.error);
+        console.warn("SpeechRecognition notice:", e.error);
+        if (voiceUserText && (!voiceCurrentTranscript || voiceUserText.textContent === "Listening…")) {
+          if (e.error === "network" || e.error === "not-allowed" || e.error === "service-not-allowed") {
+            voiceUserText.textContent = "Listening (audio will transcribe with Groq Whisper)…";
+          }
+        }
       };
 
       voiceRecognition.onend = () => {
@@ -2079,7 +2113,7 @@ function startVoiceListeningCycle() {
           voiceAudioChunks.push(e.data);
         }
       };
-      voiceMediaRecorder.start(250);
+      voiceMediaRecorder.start(200);
     } catch (err) {
       console.warn("MediaRecorder start error:", err);
     }
@@ -2103,26 +2137,65 @@ function stopVoiceRecording() {
   }
 }
 
+function getRecordedAudioBlob() {
+  return new Promise((resolve) => {
+    if (!voiceMediaRecorder || voiceMediaRecorder.state === "inactive") {
+      const mime = voiceMediaRecorder?.mimeType || "audio/webm";
+      resolve(voiceAudioChunks.length > 0 ? new Blob(voiceAudioChunks, { type: mime }) : null);
+      return;
+    }
+    const safetyTimer = setTimeout(() => {
+      const mime = voiceMediaRecorder?.mimeType || "audio/webm";
+      resolve(voiceAudioChunks.length > 0 ? new Blob(voiceAudioChunks, { type: mime }) : null);
+    }, 600);
+
+    voiceMediaRecorder.onstop = () => {
+      clearTimeout(safetyTimer);
+      const mime = voiceMediaRecorder?.mimeType || "audio/webm";
+      resolve(voiceAudioChunks.length > 0 ? new Blob(voiceAudioChunks, { type: mime }) : null);
+    };
+
+    try {
+      if (typeof voiceMediaRecorder.requestData === "function") {
+        voiceMediaRecorder.requestData();
+      }
+      voiceMediaRecorder.stop();
+    } catch (err) {
+      clearTimeout(safetyTimer);
+      const mime = voiceMediaRecorder?.mimeType || "audio/webm";
+      resolve(voiceAudioChunks.length > 0 ? new Blob(voiceAudioChunks, { type: mime }) : null);
+    }
+  });
+}
+
 async function finalizeAudioBlobRecording() {
-  stopVoiceRecording();
-  if (voiceAudioChunks.length === 0) {
-    startVoiceListeningCycle();
-    return;
+  window.clearTimeout(voiceSilenceTimer);
+  if (voiceRecognition) {
+    try {
+      voiceRecognition.onresult = null;
+      voiceRecognition.onerror = null;
+      voiceRecognition.onend = null;
+      voiceRecognition.stop();
+    } catch {}
   }
-  const mimeType = voiceMediaRecorder?.mimeType || "audio/webm";
-  const blob = new Blob(voiceAudioChunks, { type: mimeType });
-  if (blob.size < 600) {
+
+  if (voiceUserText) voiceUserText.textContent = "Processing audio…";
+  setVoiceState("thinking");
+
+  const blob = await getRecordedAudioBlob();
+  if (!blob || blob.size < 400) {
+    setVoiceState("listening");
+    if (voiceUserText) voiceUserText.textContent = "Listening…";
     startVoiceListeningCycle();
     return;
   }
 
   if (voiceUserText) voiceUserText.textContent = "Transcribing with Groq Whisper…";
-  setVoiceState("thinking");
 
   try {
     const res = await apiFetch("/api/voice/transcribe", {
       method: "POST",
-      headers: { "Content-Type": mimeType },
+      headers: { "Content-Type": blob.type || "audio/webm" },
       body: blob,
     });
     if (!res.ok) throw new Error("Voice transcription failed.");
@@ -2132,13 +2205,13 @@ async function finalizeAudioBlobRecording() {
       submitVoiceTurn(text);
     } else {
       setVoiceState("listening");
-      if (voiceUserText) voiceUserText.textContent = "Listening…";
+      if (voiceUserText) voiceUserText.textContent = "Didn't catch that. Tap or speak to try again.";
       startVoiceListeningCycle();
     }
   } catch (err) {
     console.warn("Groq transcription error:", err);
     setVoiceState("listening");
-    if (voiceUserText) voiceUserText.textContent = "Listening…";
+    if (voiceUserText) voiceUserText.textContent = "Didn't catch that. Tap or speak to try again.";
     startVoiceListeningCycle();
   }
 }
@@ -2387,7 +2460,7 @@ if (voiceVisualizerWrap) {
       // Tap orb to send or finish speaking immediately
       if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
         submitVoiceTurn(voiceCurrentTranscript.trim());
-      } else if (voiceAudioChunks.length > 0) {
+      } else {
         finalizeAudioBlobRecording();
       }
     }
@@ -2403,7 +2476,7 @@ if (voiceActionBtn) {
       // Tap action button to send or finish speaking immediately
       if (voiceCurrentTranscript && voiceCurrentTranscript.trim()) {
         submitVoiceTurn(voiceCurrentTranscript.trim());
-      } else if (voiceAudioChunks.length > 0) {
+      } else {
         finalizeAudioBlobRecording();
       }
     }
