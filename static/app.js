@@ -1703,6 +1703,7 @@ const voiceActionText = document.querySelector("#voiceActionText");
 
 let voiceState = "closed"; // "closed" | "listening" | "thinking" | "speaking" | "muted"
 let voiceTurnCounter = 0;
+let voiceTurnInProgress = false;
 let voiceMediaStream = null;
 let voiceAudioContext = null;
 let voiceAnalyser = null;
@@ -1722,17 +1723,87 @@ let voiceSpeechDetected = false;
 let voiceSilenceStartTime = 0;
 let voiceLastSpokenText = "";
 let voiceTtsWatchdog = 0;
+let voiceSettleTimer = 0;
 let cachedVoices = [];
+let currentUtterance = null;
+let selectedVoice = null;
+let selectedVoiceLangPrefix = "en";
+
+// Disqualify known male or novelty/cartoon voices from female assistant voice selection
+const MALE_VOICE_REGEX = /\b(male|man|boy|guy|daniel|oliver|arthur|david|george|fred|alex|albert|ralph|reed|rocko|grandpa|jester|trinoids|zarvox|whisper|bruce|junior|eddy|thomas|jacques|majed|xander|rishi|aman|deranged|bells|boing|bubbles|cellos|good news|bad news|organ|superstar|wobble|bahh)\b/i;
+
+function refreshCachedVoices() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  try {
+    const list = window.speechSynthesis.getVoices() || [];
+    if (list && list.length > 0) {
+      cachedVoices = list;
+      if (!selectedVoice || !cachedVoices.some((v) => v.name === selectedVoice.name)) {
+        selectedVoice = resolveBestFemaleVoice(selectedVoiceLangPrefix || "en");
+      }
+    }
+  } catch {}
+}
 
 if (typeof window !== "undefined" && window.speechSynthesis) {
   try {
-    cachedVoices = window.speechSynthesis.getVoices() || [];
-    window.speechSynthesis.onvoiceschanged = () => {
+    refreshCachedVoices();
+    if (typeof window.speechSynthesis.addEventListener === "function") {
+      window.speechSynthesis.addEventListener("voiceschanged", refreshCachedVoices);
+    }
+    window.speechSynthesis.onvoiceschanged = refreshCachedVoices;
+  } catch {}
+}
+
+function ensureVoicesLoaded(timeoutMs = 350) {
+  if (typeof window === "undefined" || !window.speechSynthesis) {
+    return Promise.resolve([]);
+  }
+  const current = window.speechSynthesis.getVoices() || [];
+  if (current.length > 0) {
+    cachedVoices = current;
+    return Promise.resolve(current);
+  }
+  return new Promise((resolve) => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
       try {
         cachedVoices = window.speechSynthesis.getVoices() || [];
       } catch {}
+      resolve(cachedVoices);
     };
-  } catch {}
+    const timer = setTimeout(done, timeoutMs);
+    const handler = () => {
+      clearTimeout(timer);
+      done();
+    };
+    if (typeof window.speechSynthesis.addEventListener === "function") {
+      window.speechSynthesis.addEventListener("voiceschanged", handler, { once: true });
+    } else {
+      window.speechSynthesis.onvoiceschanged = handler;
+    }
+  });
+}
+
+function detectConversationLanguage(text) {
+  if (!text || typeof text !== "string") return "en";
+  const s = text.trim();
+  if (/[\u3040-\u30ff]/.test(s)) return "ja";
+  if (/[\uac00-\ud7af]/.test(s)) return "ko";
+  if (/[\u4e00-\u9fff]/.test(s)) return "zh";
+  if (/[\u0600-\u06ff]/.test(s)) return "ar";
+  if (/[\u0400-\u04ff]/.test(s)) return "ru";
+  if (/[\u0900-\u097f]/.test(s)) return "hi";
+
+  if (/\b(bonjour|merci|salut|s'il vous plaît|comment ça va|très bien)\b/i.test(s)) return "fr";
+  if (/\b(hola|gracias|por favor|buenos días|cómo estás|buenas tardes)\b/i.test(s)) return "es";
+  if (/\b(hallo|danke|bitte|guten tag|wie geht's)\b/i.test(s)) return "de";
+  if (/\b(ciao|grazie|prego|buongiorno|come stai)\b/i.test(s)) return "it";
+  if (/\b(olá|obrigado|obrigada|por favor|bom dia)\b/i.test(s)) return "pt";
+
+  return "en";
 }
 
 function setVoiceState(newState) {
@@ -1759,56 +1830,244 @@ function setVoiceState(newState) {
 
 function sanitizeForSpeech(rawText) {
   if (!rawText) return "";
-  return rawText
-    .replace(/```[\s\S]*?```/g, " Here is the code snippet. ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, " link ")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/(\*\*|__)(.*?)\1/g, "$2")
-    .replace(/(\*|_)(.*?)\1/g, "$2")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/^\s*>\s+/gm, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  let text = rawText;
+  // Code blocks: convert to natural speech placeholder
+  text = text.replace(/```[\s\S]*?```/g, " Here is the code snippet. ");
+  text = text.replace(/```[\s\S]*/g, " Here is the code snippet. ");
+  // Inline code: keep text without backticks
+  text = text.replace(/`([^`]+)`/g, "$1");
+  // Markdown links: keep label, remove URL
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // URLs: pronounce as "link"
+  text = text.replace(/https?:\/\/\S+/g, " link ");
+  // Markdown headings
+  text = text.replace(/^#{1,6}\s+/gm, "");
+  // Bold and italic styling
+  text = text.replace(/(\*\*|__)(.*?)\1/g, "$2");
+  text = text.replace(/(\*|_)(.*?)\1/g, "$2");
+  text = text.replace(/~~(.*?)~~/g, "$1");
+  // List bullets and numbered lists
+  text = text.replace(/^\s*[-*+]\s+/gm, "");
+  text = text.replace(/^\s*\d+\.\s+/gm, "");
+  // Blockquotes
+  text = text.replace(/^\s*>\s+/gm, "");
+  // HTML tags
+  text = text.replace(/<[^>]+>/g, "");
+  // LaTeX & math formulas (\(...\), \[...\], $...$, $$...$$)
+  text = text.replace(/\\\[[\s\S]*?\\\]/g, " ");
+  text = text.replace(/\\\([\s\S]*?\\\)/g, " ");
+  text = text.replace(/\$\$[\s\S]*?\$\$/g, " ");
+  text = text.replace(/\$[^$\n]+\$/g, " ");
+  text = text.replace(/\\[a-zA-Z]+/g, " ");
+  text = text.replace(/\\/g, "");
+  // Leftover decorative symbols
+  text = text.replace(/[*#_~]/g, " ");
+  // Normalize whitespace
+  text = text.replace(/\s+/g, " ").trim();
+  return text;
 }
 
-function extractNextSentence(buffer) {
+function extractNextSentence(buffer, isStreamComplete = false) {
   if (!buffer) return null;
-  const match = buffer.match(/^([\s\S]*?[.!?\n]+)(?:\s+|$)([\s\S]*)$/);
-  if (!match) return null;
-  const candidate = match[1].trim();
-  if (/(?:e\.g|i\.e|vs|mr|mrs|ms|dr|prof)\.$/i.test(candidate)) {
-    return null;
+  const trimmed = buffer.trimStart();
+  if (!trimmed) return null;
+
+  if (isStreamComplete) {
+    const clean = trimmed.trim();
+    return clean ? { sentence: clean, remaining: "" } : null;
   }
-  if (candidate.length < 2) return null;
-  return {
-    sentence: candidate,
-    remaining: match[2] || "",
-  };
+
+  // Scan for punctuation boundaries: [.!?\n] followed by whitespace or end
+  const boundaryRegex = /([.!?]+|\n+)(?=\s|$)/g;
+  let match;
+  while ((match = boundaryRegex.exec(buffer)) !== null) {
+    const endIndex = match.index + match[1].length;
+    const candidate = buffer.slice(0, endIndex).trim();
+
+    // Skip abbreviations: e.g., i.e., vs., mr., mrs., ms., dr., prof., etc.
+    if (/(?:e\.g|i\.e|vs|mr|mrs|ms|dr|prof|etc)\.$/i.test(candidate)) {
+      continue;
+    }
+    // Skip decimal numbers like 3.14
+    if (/\d\.\d*$/.test(candidate)) {
+      continue;
+    }
+    // Skip trailing ellipsis if more text might follow
+    if (/\.\.\.$/.test(candidate) && buffer.length - endIndex < 5) {
+      continue;
+    }
+
+    if (candidate.length >= 2) {
+      return {
+        sentence: candidate,
+        remaining: buffer.slice(endIndex).trimStart(),
+      };
+    }
+  }
+
+  // If buffer is long (>120 chars) and contains a major clause break (, ; : \u2014)
+  if (buffer.length > 120) {
+    const clauseMatch = buffer.match(/^([\s\S]{30,100}[,;:\u2014])\s+([\s\S]*)$/);
+    if (clauseMatch) {
+      const candidate = clauseMatch[1].trim();
+      if (candidate.length >= 4) {
+        return {
+          sentence: candidate,
+          remaining: clauseMatch[2].trimStart(),
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
-function getBestVoice() {
-  if (!window.speechSynthesis) return null;
+function scoreFemaleVoice(v, targetLangPrefix) {
+  const name = (v.name || "").toLowerCase();
+  const lang = (v.lang || "").toLowerCase().replace(/_/g, "-");
+
+  // Immediate disqualification for known male or cartoon voices
+  if (MALE_VOICE_REGEX.test(name)) return -10000;
+
+  let score = 0;
+
+  // Language match check
+  const isTargetMatch = lang.startsWith(targetLangPrefix);
+  if (isTargetMatch) {
+    score += 200;
+    // Prefer US English when speaking English
+    if (targetLangPrefix === "en" && (lang === "en-us" || lang.startsWith("en-us"))) {
+      score += 20;
+    }
+  } else if (targetLangPrefix !== "en" && lang.startsWith("en")) {
+    score += 40; // Secondary fallback to English if target language voice not installed
+  } else {
+    return -500;
+  }
+
+  // 1. Apple curated natural/enhanced female voices (macOS / iOS / Safari)
+  if (/samantha\s*\(enhanced\)/i.test(name) || /samantha\s*\(premium\)/i.test(name)) {
+    score += 180;
+  } else if (/^samantha\b/i.test(name) || /\bsamantha\b/i.test(name)) {
+    score += 160;
+  } else if (/\b(ava|allison)\s*\((enhanced|premium)\)/i.test(name)) {
+    score += 155;
+  } else if (/\b(ava|allison|serena|victoria|karen|tessa|moira|sandy|shelley|flo)\b/i.test(name)) {
+    score += 140;
+  }
+
+  // 2. Microsoft Natural Neural female voices (Windows / Edge)
+  else if (/microsoft\s+(jenny|aria)\s+online\s+\(natural\)/i.test(name)) {
+    score += 175;
+  } else if (/microsoft\s+(libby|sonia|maisie|natasha|clara|neerja)\s+online\s+\(natural\)/i.test(name)) {
+    score += 150;
+  } else if (/microsoft\s+zira\b/i.test(name)) {
+    score += 120;
+  }
+
+  // 3. Google Chrome / ChromeOS / Android female voices
+  else if (/google\s+uk\s+english\s+female/i.test(name)) {
+    score += 150;
+  } else if (/google\s+us\s+english/i.test(name)) {
+    score += 145;
+  } else if (/chrome\s+os\s+.*female/i.test(name)) {
+    score += 135;
+  }
+
+  // 4. Other explicitly female-tagged voices
+  else if (/\b(female|woman|girl|femme|mujer|weiblich)\b/i.test(name)) {
+    score += 110;
+  }
+
+  // 5. International known female names
+  else if (/\b(monica|mónica|paulina|hortense|amélie|julie|anna|marlene|kyoko|yuna|tingting|meijia|sinji|lekha|luciana|joana)\b/i.test(name)) {
+    score += 120;
+  }
+
+  // Quality boosters
+  if (/natural|neural|online|enhanced|premium/i.test(name)) {
+    score += 30;
+  }
+
+  // Default system voice bonus
+  if (v.default) {
+    score += 10;
+  }
+
+  return score;
+}
+
+function resolveBestFemaleVoice(targetLang = "en") {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
   const voices = cachedVoices.length > 0 ? cachedVoices : (window.speechSynthesis.getVoices() || []);
-  const preferred = voices.find((v) =>
-    (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("Daniel") || v.name.includes("Karen") || v.name.includes("Arthur")) &&
-    v.lang.startsWith("en")
-  );
-  if (preferred) return preferred;
-  return voices.find((v) => v.lang.startsWith("en")) || voices[0] || null;
+  if (!voices || voices.length === 0) return null;
+
+  const targetPrefix = (targetLang || "en").toLowerCase().split("-")[0];
+
+  // Score all available voices
+  const scored = voices
+    .map((v) => ({ voice: v, score: scoreFemaleVoice(v, targetPrefix) }))
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length > 0 && scored[0].score > 0) {
+    return scored[0].voice;
+  }
+
+  // If no match in target language and target wasn't English, try English female pool
+  if (targetPrefix !== "en") {
+    const scoredEn = voices
+      .map((v) => ({ voice: v, score: scoreFemaleVoice(v, "en") }))
+      .sort((a, b) => b.score - a.score);
+    if (scoredEn.length > 0 && scoredEn[0].score > 0) {
+      return scoredEn[0].voice;
+    }
+  }
+
+  // Fallback: Pick any non-male voice in target language or English
+  const nonMale = voices.filter((v) => !MALE_VOICE_REGEX.test(v.name));
+  if (nonMale.length > 0) {
+    const langMatch = nonMale.find((v) => (v.lang || "").toLowerCase().startsWith(targetPrefix));
+    if (langMatch) return langMatch;
+    const defaultNonMale = nonMale.find((v) => v.default) || nonMale[0];
+    return defaultNonMale;
+  }
+
+  return voices[0] || null;
+}
+
+function getBestVoice(targetLang = "en") {
+  const targetPrefix = (targetLang || "en").toLowerCase().split("-")[0];
+
+  // Preserve voice consistency across consecutive responses and multi-turn conversations
+  if (
+    selectedVoice &&
+    selectedVoiceLangPrefix === targetPrefix &&
+    cachedVoices.some((v) => v.name === selectedVoice.name)
+  ) {
+    return selectedVoice;
+  }
+
+  const voice = resolveBestFemaleVoice(targetLang);
+  if (voice) {
+    selectedVoice = voice;
+    selectedVoiceLangPrefix = targetPrefix;
+  }
+  return voice;
 }
 
 function stopVoiceSpeech() {
   voiceSpeechQueue = [];
   voiceIsSpeaking = false;
+  currentUtterance = null;
+  if (typeof window !== "undefined") {
+    window.__lumaActiveUtterance = null;
+  }
   if (voiceTtsWatchdog) {
     clearInterval(voiceTtsWatchdog);
     voiceTtsWatchdog = 0;
   }
-  if (window.speechSynthesis) {
+  window.clearTimeout(voiceSettleTimer);
+  if (typeof window !== "undefined" && window.speechSynthesis) {
     try {
       window.speechSynthesis.cancel();
     } catch {}
@@ -1820,67 +2079,127 @@ function playNextVoiceSpeech(turnId) {
 
   if (voiceSpeechQueue.length === 0) {
     voiceIsSpeaking = false;
+    currentUtterance = null;
+    if (typeof window !== "undefined") {
+      window.__lumaActiveUtterance = null;
+    }
     if (voiceTtsWatchdog) {
       clearInterval(voiceTtsWatchdog);
       voiceTtsWatchdog = 0;
     }
     // Only switch back to listening once the entire LLM generation stream is complete!
     if (!voiceIsGenerationStreaming && voiceState === "speaking") {
+      voiceTurnInProgress = false;
       setVoiceState("listening");
       if (voiceUserText) voiceUserText.textContent = "Listening…";
-      startVoiceListeningCycle();
+      // Allow brief acoustic settle window before opening microphone so speaker output isn't re-transcribed
+      window.clearTimeout(voiceSettleTimer);
+      voiceSettleTimer = window.setTimeout(() => {
+        if (voiceState === "listening" && !voiceIsMuted) {
+          startVoiceListeningCycle();
+        }
+      }, 400);
     }
+    return;
+  }
+
+  const queueItem = voiceSpeechQueue.shift();
+  if (!queueItem || !queueItem.text || !queueItem.text.trim()) {
+    playNextVoiceSpeech(turnId);
+    return;
+  }
+
+  if (queueItem.turnId && queueItem.turnId !== voiceTurnCounter) {
+    playNextVoiceSpeech(turnId);
+    return;
+  }
+
+  if (typeof window === "undefined" || !window.speechSynthesis) {
+    console.warn("SpeechSynthesis not supported on this browser.");
+    playNextVoiceSpeech(turnId);
     return;
   }
 
   voiceIsSpeaking = true;
   setVoiceState("speaking");
-  const sentence = voiceSpeechQueue.shift();
-  if (!sentence || !sentence.trim()) {
-    playNextVoiceSpeech(turnId);
-    return;
-  }
 
-  if (window.speechSynthesis && window.speechSynthesis.paused) {
+  if (window.speechSynthesis.paused) {
     try {
       window.speechSynthesis.resume();
     } catch {}
   }
 
+  const sentence = queueItem.text;
   const utterance = new SpeechSynthesisUtterance(sentence);
-  const voice = getBestVoice();
-  if (voice) utterance.voice = voice;
-  utterance.rate = 1.05;
-  utterance.pitch = 1.0;
+  // CRITICAL: Prevent V8 / WebKit garbage collection of the active utterance
+  currentUtterance = utterance;
+  window.__lumaActiveUtterance = utterance;
 
-  if (voiceTtsWatchdog) clearInterval(voiceTtsWatchdog);
-  voiceTtsWatchdog = setInterval(() => {
-    if (!voiceIsSpeaking) {
-      clearInterval(voiceTtsWatchdog);
-      return;
-    }
-    if (window.speechSynthesis && window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-  }, 2500);
+  const targetLang = detectConversationLanguage(sentence) || "en";
+  const voice = getBestVoice(targetLang);
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang || "en-US";
+  } else {
+    utterance.lang = "en-US";
+  }
+
+  // Light, soft, gentle conversational pace and natural elevated pitch
+  utterance.rate = 0.95;
+  utterance.pitch = 1.12;
+  utterance.volume = 1.0;
+
+  let speechStartedTime = Date.now();
+
+  utterance.onstart = () => {
+    if (turnId && turnId !== voiceTurnCounter) return;
+    voiceIsSpeaking = true;
+    setVoiceState("speaking");
+    speechStartedTime = Date.now();
+  };
 
   utterance.onend = () => {
     if (voiceTtsWatchdog) {
       clearInterval(voiceTtsWatchdog);
       voiceTtsWatchdog = 0;
     }
+    currentUtterance = null;
+    window.__lumaActiveUtterance = null;
     if (turnId && turnId !== voiceTurnCounter) return;
     playNextVoiceSpeech(turnId);
   };
+
   utterance.onerror = (e) => {
     if (voiceTtsWatchdog) {
       clearInterval(voiceTtsWatchdog);
       voiceTtsWatchdog = 0;
     }
-    console.warn("Speech synthesis utterance error:", e);
+    currentUtterance = null;
+    window.__lumaActiveUtterance = null;
+    if (e.error !== "canceled" && e.error !== "interrupted") {
+      console.warn("Speech synthesis utterance notice:", e.error);
+    }
     if (turnId && turnId !== voiceTurnCounter) return;
     playNextVoiceSpeech(turnId);
   };
+
+  // Watchdog for Chrome's 15-second speech synthesis pause bug
+  if (voiceTtsWatchdog) clearInterval(voiceTtsWatchdog);
+  voiceTtsWatchdog = setInterval(() => {
+    if (!voiceIsSpeaking || !currentUtterance) {
+      clearInterval(voiceTtsWatchdog);
+      voiceTtsWatchdog = 0;
+      return;
+    }
+    if (window.speechSynthesis) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      } else if (Date.now() - speechStartedTime > 12000 && window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }
+  }, 2500);
 
   try {
     window.speechSynthesis.speak(utterance);
@@ -1890,6 +2209,8 @@ function playNextVoiceSpeech(turnId) {
       clearInterval(voiceTtsWatchdog);
       voiceTtsWatchdog = 0;
     }
+    currentUtterance = null;
+    window.__lumaActiveUtterance = null;
     playNextVoiceSpeech(turnId);
   }
 }
@@ -1898,7 +2219,7 @@ function enqueueVoiceSentence(sentence, turnId) {
   if (turnId && turnId !== voiceTurnCounter) return;
   const clean = sanitizeForSpeech(sentence);
   if (!clean || clean.length < 2) return;
-  voiceSpeechQueue.push(clean);
+  voiceSpeechQueue.push({ text: clean, turnId });
   if (!voiceIsSpeaking) {
     playNextVoiceSpeech(turnId);
   }
@@ -1906,6 +2227,7 @@ function enqueueVoiceSentence(sentence, turnId) {
 
 function interruptVoice() {
   voiceTurnCounter++;
+  voiceTurnInProgress = false;
   voiceIsGenerationStreaming = false;
   stopVoiceSpeech();
   if (voiceGenerationController) {
@@ -1940,7 +2262,7 @@ async function startVoiceVisualizer(stream) {
       if (voiceState === "closed") return;
       voiceAnimFrame = requestAnimationFrame(draw);
 
-      if (voiceState === "listening" && !voiceIsMuted && voiceAnalyser) {
+      if (voiceState === "listening" && !voiceIsMuted && !voiceIsSpeaking && !voiceTurnInProgress && voiceAnalyser) {
         voiceAnalyser.getByteTimeDomainData(timeDomainData);
         let sumSq = 0;
         for (let i = 0; i < timeDomainData.length; i++) {
@@ -2014,7 +2336,7 @@ function stopVoiceVisualizer() {
 }
 
 function startVoiceListeningCycle() {
-  if (voiceState !== "listening" || voiceIsMuted) return;
+  if (voiceState !== "listening" || voiceIsMuted || voiceIsSpeaking || voiceTurnInProgress) return;
   window.clearTimeout(voiceSilenceTimer);
   voiceCurrentTranscript = "";
   voiceAudioChunks = [];
@@ -2043,7 +2365,7 @@ function startVoiceListeningCycle() {
       voiceRecognition.lang = "en-US";
 
       voiceRecognition.onresult = (event) => {
-        if (voiceState !== "listening" || voiceIsMuted) return;
+        if (voiceState !== "listening" || voiceIsMuted || voiceIsSpeaking || voiceTurnInProgress) return;
         let interim = "";
         let final = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -2066,7 +2388,7 @@ function startVoiceListeningCycle() {
           // Conversational pause trigger
           window.clearTimeout(voiceSilenceTimer);
           voiceSilenceTimer = window.setTimeout(() => {
-            if (voiceState === "listening" && voiceCurrentTranscript.trim()) {
+            if (voiceState === "listening" && !voiceIsSpeaking && !voiceTurnInProgress && voiceCurrentTranscript.trim()) {
               submitVoiceTurn(voiceCurrentTranscript.trim());
             }
           }, final ? 700 : 1000);
@@ -2084,7 +2406,7 @@ function startVoiceListeningCycle() {
       };
 
       voiceRecognition.onend = () => {
-        if (voiceState === "listening" && !voiceIsMuted) {
+        if (voiceState === "listening" && !voiceIsMuted && !voiceIsSpeaking && !voiceTurnInProgress) {
           try {
             voiceRecognition.start();
           } catch {}
@@ -2169,6 +2491,7 @@ function getRecordedAudioBlob() {
 }
 
 async function finalizeAudioBlobRecording() {
+  if (voiceTurnInProgress || voiceState !== "listening" || voiceIsSpeaking) return;
   window.clearTimeout(voiceSilenceTimer);
   if (voiceRecognition) {
     try {
@@ -2222,24 +2545,31 @@ async function submitVoiceTurn(userText) {
     return;
   }
 
+  // Guard against concurrent submissions
+  if (voiceTurnInProgress) return;
+  voiceTurnInProgress = true;
+
   const thisTurn = ++voiceTurnCounter;
   voiceIsGenerationStreaming = true;
   stopVoiceRecording();
+  stopVoiceSpeech();
   setVoiceState("thinking");
-  if (voiceUserText) voiceUserText.textContent = userText;
+
+  const cleanUserText = userText.trim();
+  if (voiceUserText) voiceUserText.textContent = cleanUserText;
   if (voiceAiText) voiceAiText.textContent = "…";
 
   const chat = currentConversation;
   const userMessage = {
     id: makeId(),
     role: "user",
-    content: userText,
+    content: cleanUserText,
     status: "complete",
     createdAt: Date.now(),
   };
   chat.messages.push(userMessage);
   if (chat.messages.filter((m) => m.role === "user").length === 1) {
-    chat.title = titleFromFirstMessage(userText) || "Voice conversation";
+    chat.title = titleFromFirstMessage(cleanUserText) || "Voice conversation";
   }
   chat.updatedAt = Date.now();
   if (!conversations.some((c) => c.id === chat.id)) conversations.unshift(chat);
@@ -2256,6 +2586,9 @@ async function submitVoiceTurn(userText) {
   };
   chat.messages.push(assistantMessage);
   persist();
+
+  // Render the conversation so the user query and streaming assistant placeholder appear in chat
+  renderConversation({ scroll: true });
 
   voiceGenerationController = new AbortController();
   activeGeneration = { controller: voiceGenerationController, chatId: chat.id, assistantId: assistantMessage.id };
@@ -2293,6 +2626,7 @@ async function submitVoiceTurn(userText) {
       if (event === "token" && typeof payload.text === "string") {
         assistantMessage.content += payload.text;
         if (voiceAiText) voiceAiText.textContent = assistantMessage.content;
+        updateAssistantMessage(chat, assistantMessage);
         sentenceBuffer += payload.text;
 
         let extracted = extractNextSentence(sentenceBuffer);
@@ -2310,13 +2644,22 @@ async function submitVoiceTurn(userText) {
 
     voiceIsGenerationStreaming = false;
 
+    // Flush any remaining text in sentenceBuffer at stream end
     if (sentenceBuffer.trim()) {
-      enqueueVoiceSentence(sentenceBuffer, thisTurn);
+      const finalSentence = extractNextSentence(sentenceBuffer, true);
+      if (finalSentence && finalSentence.sentence) {
+        enqueueVoiceSentence(finalSentence.sentence, thisTurn);
+      } else {
+        enqueueVoiceSentence(sentenceBuffer, thisTurn);
+      }
+      sentenceBuffer = "";
     }
 
     assistantMessage.status = "complete";
     voiceLastSpokenText = assistantMessage.content;
     if (voiceReplayBtn) voiceReplayBtn.hidden = false;
+    finishAssistantDisplay(chat, assistantMessage);
+    renderHistory();
     chat.updatedAt = Date.now();
     persist();
   } catch (err) {
@@ -2325,11 +2668,13 @@ async function submitVoiceTurn(userText) {
 
     if (err.name === "AbortError") {
       assistantMessage.status = "complete";
+      finishAssistantDisplay(chat, assistantMessage);
     } else {
       assistantMessage.status = "failed";
       assistantMessage.error = err.message || "Voice response error.";
       if (voiceAiText) voiceAiText.textContent = assistantMessage.error;
       showToast(assistantMessage.error);
+      finishAssistantDisplay(chat, assistantMessage);
     }
     chat.updatedAt = Date.now();
     persist();
@@ -2341,6 +2686,7 @@ async function submitVoiceTurn(userText) {
       }
       updateGenerationControls();
       if (voiceSpeechQueue.length === 0 && !voiceIsSpeaking) {
+        voiceTurnInProgress = false;
         setVoiceState("listening");
         if (voiceUserText) voiceUserText.textContent = "Listening…";
         startVoiceListeningCycle();
@@ -2355,13 +2701,15 @@ async function openVoiceMode() {
     return;
   }
 
-  // Prime and unlock speech synthesis with user interaction
-  if (window.speechSynthesis) {
+  // Prime speech synthesis cleanly, ensuring voices are loaded and initialized
+  if (typeof window !== "undefined" && window.speechSynthesis) {
     try {
-      window.speechSynthesis.getVoices();
-      const dummy = new SpeechSynthesisUtterance("");
-      window.speechSynthesis.speak(dummy);
+      refreshCachedVoices();
+      ensureVoicesLoaded();
       window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
     } catch {}
   }
 
@@ -2369,6 +2717,7 @@ async function openVoiceMode() {
   if (voiceUserText) voiceUserText.textContent = "Requesting microphone permission…";
   if (voiceAiText) voiceAiText.textContent = "";
   if (voiceReplayBtn) voiceReplayBtn.hidden = !voiceLastSpokenText;
+  voiceTurnInProgress = false;
   setVoiceState("listening");
 
   try {
@@ -2393,6 +2742,7 @@ async function openVoiceMode() {
 
 function closeVoiceMode() {
   setVoiceState("closed");
+  voiceTurnInProgress = false;
   stopVoiceSpeech();
   stopVoiceRecording();
   stopVoiceVisualizer();

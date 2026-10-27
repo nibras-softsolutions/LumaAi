@@ -219,7 +219,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=()"
+        "camera=(), microphone=(self), geolocation=()"
     )
     return response
 

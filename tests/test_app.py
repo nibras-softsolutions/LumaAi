@@ -523,6 +523,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("script-src 'self'", response.headers["content-security-policy"])
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
         self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+        self.assertIn("microphone=(self)", response.headers["permissions-policy"])
         self.assertIn("<title>Luma AI</title>", response.text)
         self.assertIn('aria-label="Luma AI home"', response.text)
         self.assertIn("<strong>Luma AI</strong>", response.text)
