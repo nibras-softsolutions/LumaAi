@@ -4,9 +4,12 @@
 .pytest_cache/
 .vscode/
 __pycache__/
+*.py
 *.py[cod]
+requirements.txt
+pytest.ini
+*.db
 tests/
-tools.py
 venv/
 .venv/
 .vercel/
