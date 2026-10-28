@@ -1,0 +1,786 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		08BA6B6666710C207700126D /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3042CA456A720818F9C2A42 /* AuthViewModel.swift */; };
+		09A0D4016728C79E878F2F6D /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10CC8B1427C2E249063778ED /* HapticFeedback.swift */; };
+		148C036093D990C288F4ADDA /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28157A7D6664184A090771C6 /* ChatViewModel.swift */; };
+		192F9E60FFDCD99D773A0A93 /* NetworkError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6CDD9253DD00689EDF5D78A /* NetworkError.swift */; };
+		1FF07A8DE03E102E9BD6F2A2 /* AudioVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC80D709A5C3B10F2E4A879 /* AudioVisualizerView.swift */; };
+		248F878AD473A16575D8135C /* ColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8258EA4C87E16ACE887358CA /* ColorPalette.swift */; };
+		2669DC6ED7541FAF92BDCEFB /* APIEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C9BBBF439D31A593B80C53A /* APIEndpoint.swift */; };
+		2B87A053D91D9EA1DF684627 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F960BBC3ACE503490070FF /* EmptyStateView.swift */; };
+		2CA1F62A58CE3EAC307A5111 /* LumaAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7251316536D02A2F06C6A145 /* LumaAIApp.swift */; };
+		309123D28DB66A79024C738B /* ImageGenerationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EFA2831C310A20B5CEBF4A /* ImageGenerationViewModel.swift */; };
+		324C8037F346050F69561858 /* ImageGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */; };
+		3D83BC8800434C1BC885C4FF /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35B60D6924377CE8669D2E9 /* MessageBubbleView.swift */; };
+		405E988FD9AF8168998C5B62 /* TextToSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC4930FF2CEEE8A47F4F791 /* TextToSpeechService.swift */; };
+		422074C01015754AF9DCCF22 /* MainContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */; };
+		482EBD8669AE43D0766638B0 /* SSEParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9793FF88714E8DD050C82192 /* SSEParserTests.swift */; };
+		4C7083C7B809FF725C6A02F0 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE0079BED0F76442B7AD125E /* SettingsViewModel.swift */; };
+		4F1ED91483EA3E5E583494E4 /* UserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB16FCB6AEC817888FC5758 /* UserPreferences.swift */; };
+		55C27B329E5705646B87CDBC /* ImageViewerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07611C61C65C0D51287C4F /* ImageViewerView.swift */; };
+		6200EB6EDE1C0F4BEFDEC929 /* ComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2241EE881613773AA1A4787 /* ComposerView.swift */; };
+		635059B333D2E889D72B385A /* ConversationStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1557322300F55C521B669BC1 /* ConversationStoreTests.swift */; };
+		6920D77BDBA3A0251BA2AEE0 /* VoiceConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7D279E92F4B338FE188238 /* VoiceConversationView.swift */; };
+		705E8D8BF2533408FA7232EB /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */; };
+		808C985C1F924B772796AF83 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B248F4017DD787185D2980B /* MarkdownView.swift */; };
+		80DDB003C1A14E0FD35AD8E9 /* ImageGenerationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E943CEDD8EB87FC40657F6D7 /* ImageGenerationView.swift */; };
+		87E149A209232D0C8FA7DE19 /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC289D99D2549118E0DE898 /* SpeechRecognitionService.swift */; };
+		8B1355B56E6FEA506ED77F4D /* ModelDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC2D09471F21D4A493C83C8 /* ModelDecodingTests.swift */; };
+		8B370635FCE743F28049507F /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C7B249A0ED089B09DDD42C /* HistoryView.swift */; };
+		91F006EA2A4D56DB686130F2 /* APIEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */; };
+		95C650708682F9BB13E6335E /* VoiceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2FA4385AB7022E4C7B812E /* VoiceViewModel.swift */; };
+		96143A8B82813EEE151D0015 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E31637C230B925ACA8C297E /* AppEnvironment.swift */; };
+		9D6D8FB2D8DF72005108B009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */; };
+		A4A9F6FDA9DA1FE3FE4706D7 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89F5732A8AEC27C2998CA83 /* OnboardingView.swift */; };
+		AB8DC3BB22CF3FC744D356F7 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F0794D3C4A2495F9DC6C82 /* ConversationStore.swift */; };
+		ACFE3C4AE97B2DE364E3E33D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 65C33C65D61C8D3EFF4C4ADF /* Assets.xcassets */; };
+		BA7620FE1B2AB7265DF0BCA8 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E5AE78BAF20BB47F965EA4 /* KeychainHelper.swift */; };
+		BAC511A0557329A3E5C5BFE4 /* LumaTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */; };
+		BC3FE9AA791791B7236B8A46 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436FD0181301A5F5BEF8F87D /* AuthenticationManager.swift */; };
+		BF84F73610AB890A6E7880E3 /* LumaButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53263EEA716F6EA5CD429A74 /* LumaButton.swift */; };
+		BFDA29AE00FAF1AF1790C74D /* Typography.swift in Sources */ = {isa = PBXBuildFile; fileRef = D386BBDAC98337D5048E2CC9 /* Typography.swift */; };
+		C2FC119614E3874EBFDFB5A6 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 8ADB87313ABBAE6BAF15C655 /* LaunchScreen.storyboard */; };
+		CC5A812AE1329AFB0DD9DBDA /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7281576778251B3040C4A104 /* AuthView.swift */; };
+		CEE7E0CEABCB1816E382F25C /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A475F1A9F82552488CBCD21 /* Conversation.swift */; };
+		DF529A92992F93CB4F49E1C6 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F089E1436E610BC968EB943 /* ChatMessage.swift */; };
+		E2831D07346472D0F27C7158 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C4535F7209E4AE6B3D017B /* ChatView.swift */; };
+		E546736E027EFAC293434436 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 678D65AD731428ACC9E9BE8B /* GoogleSignIn */; };
+		E57361E0D98761887E541097 /* ServerStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9832724860A44FD6C4A4BB9 /* ServerStatus.swift */; };
+		E7C0D2A268EC758B3ED1896F /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3764937B4A2028FE46D70FD8 /* APIClient.swift */; };
+		EB2C7AF7A2554481290B4A84 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E299E55BB77DCAB1FDB0D47 /* User.swift */; };
+		F57074C1728FD0C542DC42E7 /* SSEParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAF17E95EAD6A6E48901E083 /* SSEParser.swift */; };
+		F9AEE460B09E435274B6CB86 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A2A8D662F3BD639A7D81E5 /* HistoryViewModel.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7DC691999C7DDD438642469E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85F3E57C504DC2F55DEC7035 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 955F94D41EF46B9CB758E9EE;
+			remoteInfo = LumaAI;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0A475F1A9F82552488CBCD21 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		0F2FA4385AB7022E4C7B812E /* VoiceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceViewModel.swift; sourceTree = "<group>"; };
+		10CC8B1427C2E249063778ED /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
+		1557322300F55C521B669BC1 /* ConversationStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStoreTests.swift; sourceTree = "<group>"; };
+		25C4535F7209E4AE6B3D017B /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		28157A7D6664184A090771C6 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		2C9BBBF439D31A593B80C53A /* APIEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpoint.swift; sourceTree = "<group>"; };
+		3764937B4A2028FE46D70FD8 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		42B0B07606D64F9544C2C747 /* LumaAI.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LumaAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		436FD0181301A5F5BEF8F87D /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
+		4EB16FCB6AEC817888FC5758 /* UserPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPreferences.swift; sourceTree = "<group>"; };
+		53263EEA716F6EA5CD429A74 /* LumaButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaButton.swift; sourceTree = "<group>"; };
+		59F960BBC3ACE503490070FF /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		5E31637C230B925ACA8C297E /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		61F0794D3C4A2495F9DC6C82 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
+		65C33C65D61C8D3EFF4C4ADF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		69A2A8D662F3BD639A7D81E5 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
+		6B805BDFBCE897D40290477C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6CC2D09471F21D4A493C83C8 /* ModelDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDecodingTests.swift; sourceTree = "<group>"; };
+		6F089E1436E610BC968EB943 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		7251316536D02A2F06C6A145 /* LumaAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaAIApp.swift; sourceTree = "<group>"; };
+		7281576778251B3040C4A104 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		72C7B249A0ED089B09DDD42C /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		8258EA4C87E16ACE887358CA /* ColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorPalette.swift; sourceTree = "<group>"; };
+		8ADB87313ABBAE6BAF15C655 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		8B248F4017DD787185D2980B /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
+		8E299E55BB77DCAB1FDB0D47 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		96E5AE78BAF20BB47F965EA4 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		9793FF88714E8DD050C82192 /* SSEParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParserTests.swift; sourceTree = "<group>"; };
+		9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainContainerView.swift; sourceTree = "<group>"; };
+		9EC4930FF2CEEE8A47F4F791 /* TextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechService.swift; sourceTree = "<group>"; };
+		A35B60D6924377CE8669D2E9 /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
+		A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointTests.swift; sourceTree = "<group>"; };
+		AAC80D709A5C3B10F2E4A879 /* AudioVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioVisualizerView.swift; sourceTree = "<group>"; };
+		AC07611C61C65C0D51287C4F /* ImageViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewerView.swift; sourceTree = "<group>"; };
+		AE0079BED0F76442B7AD125E /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		B12AB0ECBB1E75CE252C0AB7 /* LumaAITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LumaAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B3042CA456A720818F9C2A42 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B6CDD9253DD00689EDF5D78A /* NetworkError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkError.swift; sourceTree = "<group>"; };
+		C5EFA2831C310A20B5CEBF4A /* ImageGenerationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGenerationViewModel.swift; sourceTree = "<group>"; };
+		C89F5732A8AEC27C2998CA83 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		C9832724860A44FD6C4A4BB9 /* ServerStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerStatus.swift; sourceTree = "<group>"; };
+		D2241EE881613773AA1A4787 /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
+		D386BBDAC98337D5048E2CC9 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
+		DA7D279E92F4B338FE188238 /* VoiceConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceConversationView.swift; sourceTree = "<group>"; };
+		DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		DFC289D99D2549118E0DE898 /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
+		E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGeneration.swift; sourceTree = "<group>"; };
+		E943CEDD8EB87FC40657F6D7 /* ImageGenerationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGenerationView.swift; sourceTree = "<group>"; };
+		EAF17E95EAD6A6E48901E083 /* SSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParser.swift; sourceTree = "<group>"; };
+		ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaTextField.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8D89536727E251D6F2EF5690 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E546736E027EFAC293434436 /* GoogleSignIn in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		094E0432B1E898AA9E4F4CA5 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				72C7B249A0ED089B09DDD42C /* HistoryView.swift */,
+				69A2A8D662F3BD639A7D81E5 /* HistoryViewModel.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		13A5CB9876083FB882172C94 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */,
+				AE0079BED0F76442B7AD125E /* SettingsViewModel.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		140E9D1192ACA5369905C96A /* Authentication */ = {
+			isa = PBXGroup;
+			children = (
+				7281576778251B3040C4A104 /* AuthView.swift */,
+				B3042CA456A720818F9C2A42 /* AuthViewModel.swift */,
+			);
+			path = Authentication;
+			sourceTree = "<group>";
+		};
+		14291C6344DE87E361D3D990 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				61F0794D3C4A2495F9DC6C82 /* ConversationStore.swift */,
+				4EB16FCB6AEC817888FC5758 /* UserPreferences.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		2E01E2B3F25515FA8988441C /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				8258EA4C87E16ACE887358CA /* ColorPalette.swift */,
+				10CC8B1427C2E249063778ED /* HapticFeedback.swift */,
+				D386BBDAC98337D5048E2CC9 /* Typography.swift */,
+				5B82663C4B1DB67D82385950 /* Components */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		2E18DE1DDEFAFD72F0E93A34 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				C89F5732A8AEC27C2998CA83 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		3A762F3DA2D024AD8036C3BF = {
+			isa = PBXGroup;
+			children = (
+				60E4CF31B93007552FF55EAB /* LumaAI */,
+				EC46480084623C038C1C9BEE /* LumaAITests */,
+				5EE85CF7D60A002C61D99203 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4D5A03A8856EEA1AD4D92DDD /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				3764937B4A2028FE46D70FD8 /* APIClient.swift */,
+				2C9BBBF439D31A593B80C53A /* APIEndpoint.swift */,
+				B6CDD9253DD00689EDF5D78A /* NetworkError.swift */,
+				EAF17E95EAD6A6E48901E083 /* SSEParser.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		5B82663C4B1DB67D82385950 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				59F960BBC3ACE503490070FF /* EmptyStateView.swift */,
+				53263EEA716F6EA5CD429A74 /* LumaButton.swift */,
+				ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */,
+				DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		5EE85CF7D60A002C61D99203 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				42B0B07606D64F9544C2C747 /* LumaAI.app */,
+				B12AB0ECBB1E75CE252C0AB7 /* LumaAITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		60E4CF31B93007552FF55EAB /* LumaAI */ = {
+			isa = PBXGroup;
+			children = (
+				5E31637C230B925ACA8C297E /* AppEnvironment.swift */,
+				7251316536D02A2F06C6A145 /* LumaAIApp.swift */,
+				8DF6F6C9C2DF8F25E156E3CD /* Core */,
+				2E01E2B3F25515FA8988441C /* DesignSystem */,
+				E5702003261A817BB4473299 /* Features */,
+				EAE5A0FED9E0A275A952BF1B /* Resources */,
+			);
+			path = LumaAI;
+			sourceTree = "<group>";
+		};
+		86F3EA570AD851E91A78CF3C /* ImageGeneration */ = {
+			isa = PBXGroup;
+			children = (
+				E943CEDD8EB87FC40657F6D7 /* ImageGenerationView.swift */,
+				C5EFA2831C310A20B5CEBF4A /* ImageGenerationViewModel.swift */,
+				AC07611C61C65C0D51287C4F /* ImageViewerView.swift */,
+			);
+			path = ImageGeneration;
+			sourceTree = "<group>";
+		};
+		8DF6F6C9C2DF8F25E156E3CD /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				AC3F60A87B8D40BD080CC13A /* Authentication */,
+				ED162A144B23C5BAB7E8DDF7 /* Models */,
+				4D5A03A8856EEA1AD4D92DDD /* Networking */,
+				14291C6344DE87E361D3D990 /* Storage */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		9AD2C3FA48D7CF702FE28E2A /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				AAC80D709A5C3B10F2E4A879 /* AudioVisualizerView.swift */,
+				DFC289D99D2549118E0DE898 /* SpeechRecognitionService.swift */,
+				9EC4930FF2CEEE8A47F4F791 /* TextToSpeechService.swift */,
+				DA7D279E92F4B338FE188238 /* VoiceConversationView.swift */,
+				0F2FA4385AB7022E4C7B812E /* VoiceViewModel.swift */,
+			);
+			path = Voice;
+			sourceTree = "<group>";
+		};
+		AC3F60A87B8D40BD080CC13A /* Authentication */ = {
+			isa = PBXGroup;
+			children = (
+				436FD0181301A5F5BEF8F87D /* AuthenticationManager.swift */,
+				96E5AE78BAF20BB47F965EA4 /* KeychainHelper.swift */,
+			);
+			path = Authentication;
+			sourceTree = "<group>";
+		};
+		DE170F2C339C3D203B96BFD7 /* Main */ = {
+			isa = PBXGroup;
+			children = (
+				9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */,
+			);
+			path = Main;
+			sourceTree = "<group>";
+		};
+		E5702003261A817BB4473299 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				140E9D1192ACA5369905C96A /* Authentication */,
+				F20D2ADCEB3A910B29115A85 /* Chat */,
+				094E0432B1E898AA9E4F4CA5 /* History */,
+				86F3EA570AD851E91A78CF3C /* ImageGeneration */,
+				DE170F2C339C3D203B96BFD7 /* Main */,
+				2E18DE1DDEFAFD72F0E93A34 /* Onboarding */,
+				13A5CB9876083FB882172C94 /* Settings */,
+				9AD2C3FA48D7CF702FE28E2A /* Voice */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		EAE5A0FED9E0A275A952BF1B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				65C33C65D61C8D3EFF4C4ADF /* Assets.xcassets */,
+				6B805BDFBCE897D40290477C /* Info.plist */,
+				8ADB87313ABBAE6BAF15C655 /* LaunchScreen.storyboard */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		EC46480084623C038C1C9BEE /* LumaAITests */ = {
+			isa = PBXGroup;
+			children = (
+				A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */,
+				1557322300F55C521B669BC1 /* ConversationStoreTests.swift */,
+				6CC2D09471F21D4A493C83C8 /* ModelDecodingTests.swift */,
+				9793FF88714E8DD050C82192 /* SSEParserTests.swift */,
+			);
+			path = LumaAITests;
+			sourceTree = "<group>";
+		};
+		ED162A144B23C5BAB7E8DDF7 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				6F089E1436E610BC968EB943 /* ChatMessage.swift */,
+				0A475F1A9F82552488CBCD21 /* Conversation.swift */,
+				E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */,
+				C9832724860A44FD6C4A4BB9 /* ServerStatus.swift */,
+				8E299E55BB77DCAB1FDB0D47 /* User.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F20D2ADCEB3A910B29115A85 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				25C4535F7209E4AE6B3D017B /* ChatView.swift */,
+				28157A7D6664184A090771C6 /* ChatViewModel.swift */,
+				D2241EE881613773AA1A4787 /* ComposerView.swift */,
+				8B248F4017DD787185D2980B /* MarkdownView.swift */,
+				A35B60D6924377CE8669D2E9 /* MessageBubbleView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		90C81F797BD1FF3D8C8287F0 /* LumaAITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A85FD629E869C4C454899F0D /* Build configuration list for PBXNativeTarget "LumaAITests" */;
+			buildPhases = (
+				557D4D9F1CB636F2875500B4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9DB1672690994D5D1E6ECC08 /* PBXTargetDependency */,
+			);
+			name = LumaAITests;
+			packageProductDependencies = (
+			);
+			productName = LumaAITests;
+			productReference = B12AB0ECBB1E75CE252C0AB7 /* LumaAITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		955F94D41EF46B9CB758E9EE /* LumaAI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDE988CD7A2E6B0D874889CA /* Build configuration list for PBXNativeTarget "LumaAI" */;
+			buildPhases = (
+				124CB825067D6E98E8B630E5 /* Sources */,
+				041A38614DA3FA99D018F778 /* Resources */,
+				8D89536727E251D6F2EF5690 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LumaAI;
+			packageProductDependencies = (
+				678D65AD731428ACC9E9BE8B /* GoogleSignIn */,
+			);
+			productName = LumaAI;
+			productReference = 42B0B07606D64F9544C2C747 /* LumaAI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		85F3E57C504DC2F55DEC7035 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					955F94D41EF46B9CB758E9EE = {
+						DevelopmentTeam = S9HCF8W2FW;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B38B88C6A3B7DE515E4C875A /* Build configuration list for PBXProject "LumaAI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 3A762F3DA2D024AD8036C3BF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1837F865655A44CA72C2FCA7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5EE85CF7D60A002C61D99203 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				955F94D41EF46B9CB758E9EE /* LumaAI */,
+				90C81F797BD1FF3D8C8287F0 /* LumaAITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		041A38614DA3FA99D018F778 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ACFE3C4AE97B2DE364E3E33D /* Assets.xcassets in Resources */,
+				C2FC119614E3874EBFDFB5A6 /* LaunchScreen.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		124CB825067D6E98E8B630E5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E7C0D2A268EC758B3ED1896F /* APIClient.swift in Sources */,
+				2669DC6ED7541FAF92BDCEFB /* APIEndpoint.swift in Sources */,
+				96143A8B82813EEE151D0015 /* AppEnvironment.swift in Sources */,
+				1FF07A8DE03E102E9BD6F2A2 /* AudioVisualizerView.swift in Sources */,
+				CC5A812AE1329AFB0DD9DBDA /* AuthView.swift in Sources */,
+				08BA6B6666710C207700126D /* AuthViewModel.swift in Sources */,
+				BC3FE9AA791791B7236B8A46 /* AuthenticationManager.swift in Sources */,
+				DF529A92992F93CB4F49E1C6 /* ChatMessage.swift in Sources */,
+				E2831D07346472D0F27C7158 /* ChatView.swift in Sources */,
+				148C036093D990C288F4ADDA /* ChatViewModel.swift in Sources */,
+				248F878AD473A16575D8135C /* ColorPalette.swift in Sources */,
+				6200EB6EDE1C0F4BEFDEC929 /* ComposerView.swift in Sources */,
+				CEE7E0CEABCB1816E382F25C /* Conversation.swift in Sources */,
+				AB8DC3BB22CF3FC744D356F7 /* ConversationStore.swift in Sources */,
+				2B87A053D91D9EA1DF684627 /* EmptyStateView.swift in Sources */,
+				09A0D4016728C79E878F2F6D /* HapticFeedback.swift in Sources */,
+				8B370635FCE743F28049507F /* HistoryView.swift in Sources */,
+				F9AEE460B09E435274B6CB86 /* HistoryViewModel.swift in Sources */,
+				324C8037F346050F69561858 /* ImageGeneration.swift in Sources */,
+				80DDB003C1A14E0FD35AD8E9 /* ImageGenerationView.swift in Sources */,
+				309123D28DB66A79024C738B /* ImageGenerationViewModel.swift in Sources */,
+				55C27B329E5705646B87CDBC /* ImageViewerView.swift in Sources */,
+				BA7620FE1B2AB7265DF0BCA8 /* KeychainHelper.swift in Sources */,
+				2CA1F62A58CE3EAC307A5111 /* LumaAIApp.swift in Sources */,
+				BF84F73610AB890A6E7880E3 /* LumaButton.swift in Sources */,
+				BAC511A0557329A3E5C5BFE4 /* LumaTextField.swift in Sources */,
+				422074C01015754AF9DCCF22 /* MainContainerView.swift in Sources */,
+				808C985C1F924B772796AF83 /* MarkdownView.swift in Sources */,
+				3D83BC8800434C1BC885C4FF /* MessageBubbleView.swift in Sources */,
+				192F9E60FFDCD99D773A0A93 /* NetworkError.swift in Sources */,
+				A4A9F6FDA9DA1FE3FE4706D7 /* OnboardingView.swift in Sources */,
+				F57074C1728FD0C542DC42E7 /* SSEParser.swift in Sources */,
+				E57361E0D98761887E541097 /* ServerStatus.swift in Sources */,
+				9D6D8FB2D8DF72005108B009 /* SettingsView.swift in Sources */,
+				4C7083C7B809FF725C6A02F0 /* SettingsViewModel.swift in Sources */,
+				87E149A209232D0C8FA7DE19 /* SpeechRecognitionService.swift in Sources */,
+				705E8D8BF2533408FA7232EB /* StatusBadge.swift in Sources */,
+				405E988FD9AF8168998C5B62 /* TextToSpeechService.swift in Sources */,
+				BFDA29AE00FAF1AF1790C74D /* Typography.swift in Sources */,
+				EB2C7AF7A2554481290B4A84 /* User.swift in Sources */,
+				4F1ED91483EA3E5E583494E4 /* UserPreferences.swift in Sources */,
+				6920D77BDBA3A0251BA2AEE0 /* VoiceConversationView.swift in Sources */,
+				95C650708682F9BB13E6335E /* VoiceViewModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		557D4D9F1CB636F2875500B4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91F006EA2A4D56DB686130F2 /* APIEndpointTests.swift in Sources */,
+				635059B333D2E889D72B385A /* ConversationStoreTests.swift in Sources */,
+				8B1355B56E6FEA506ED77F4D /* ModelDecodingTests.swift in Sources */,
+				482EBD8669AE43D0766638B0 /* SSEParserTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9DB1672690994D5D1E6ECC08 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 955F94D41EF46B9CB758E9EE /* LumaAI */;
+			targetProxy = 7DC691999C7DDD438642469E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		05CDF725C12CD97A37AC4F91 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		1880A8EA4626A0AD714ACFDD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				INFOPLIST_FILE = LumaAI/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAI;
+				PRODUCT_NAME = LumaAI;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3A10E534591175086A2DAE85 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAITests;
+				PRODUCT_NAME = LumaAITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LumaAI.app/LumaAI";
+			};
+			name = Release;
+		};
+		D8EEFC28AFB383DACCF1502F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				INFOPLIST_FILE = LumaAI/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAI;
+				PRODUCT_NAME = LumaAI;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DD60F8E331D4B331B3FFEC77 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		FACA92F9952118189903490D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAITests;
+				PRODUCT_NAME = LumaAITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LumaAI.app/LumaAI";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A85FD629E869C4C454899F0D /* Build configuration list for PBXNativeTarget "LumaAITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FACA92F9952118189903490D /* Debug */,
+				3A10E534591175086A2DAE85 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B38B88C6A3B7DE515E4C875A /* Build configuration list for PBXProject "LumaAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD60F8E331D4B331B3FFEC77 /* Debug */,
+				05CDF725C12CD97A37AC4F91 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CDE988CD7A2E6B0D874889CA /* Build configuration list for PBXNativeTarget "LumaAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1880A8EA4626A0AD714ACFDD /* Debug */,
+				D8EEFC28AFB383DACCF1502F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1837F865655A44CA72C2FCA7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		678D65AD731428ACC9E9BE8B /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1837F865655A44CA72C2FCA7 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 85F3E57C504DC2F55DEC7035 /* Project object */;
+}
