@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 from dotenv import load_dotenv
+import httpx
 
 load_dotenv()
 
@@ -167,6 +168,39 @@ class LoginRequest(BaseModel):
         return value
 
 
+GOOGLE_IOS_CLIENT_ID = os.getenv(
+    "GOOGLE_IOS_CLIENT_ID",
+    "172474086048-ke3r4ekgdm0vcak48j1bvqqb6msrmubh.apps.googleusercontent.com",
+).strip()
+GOOGLE_WEB_CLIENT_ID = os.getenv(
+    "GOOGLE_WEB_CLIENT_ID",
+    "172474086048-02bpfth3nc9md882lhc22bkfl2raojpd.apps.googleusercontent.com",
+).strip()
+ALLOWED_GOOGLE_AUDIENCES = {GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID}
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str | None = None
+    idToken: str | None = None
+
+    @field_validator("id_token", "idToken", mode="before")
+    @classmethod
+    def clean_token(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+    def get_token(self) -> str:
+        token = self.id_token or self.idToken
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google ID token is required.",
+            )
+        return token
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -288,6 +322,122 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="Unable to create an account with this email. Try logging in instead.",
         ) from exc
+    _set_session_cookie(response, token)
+    return user
+
+
+async def verify_google_id_token(token: str) -> dict:
+    # 1. Attempt verification via google-auth if installed
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+
+        idinfo = await asyncio.to_thread(
+            id_token.verify_oauth2_token,
+            token,
+            google_requests.Request(),
+        )
+        aud = idinfo.get("aud")
+        if aud not in ALLOWED_GOOGLE_AUDIENCES:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Google ID token audience '{aud}' not allowed.",
+            )
+        iss = idinfo.get("iss")
+        if iss not in {"accounts.google.com", "https://accounts.google.com"}:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Google ID token issuer.",
+            )
+        return idinfo
+    except ImportError:
+        pass
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google ID token verification failed: {exc}",
+        )
+
+    # 2. Direct verification with Google tokeninfo endpoint
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to reach Google for token verification.",
+            ) from exc
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google ID token verification failed.",
+        )
+
+    idinfo = resp.json()
+    aud = idinfo.get("aud")
+    if aud not in ALLOWED_GOOGLE_AUDIENCES:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google ID token audience '{aud}' not allowed.",
+        )
+    iss = idinfo.get("iss")
+    if iss not in {"accounts.google.com", "https://accounts.google.com"}:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google ID token issuer.",
+        )
+    exp = int(idinfo.get("exp", 0))
+    if exp < int(datetime.now(timezone.utc).timestamp()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google ID token has expired.",
+        )
+    return idinfo
+
+
+@router.post("/google", response_model=UserResponse)
+async def google_login(
+    data: GoogleLoginRequest,
+    request: Request,
+    response: Response,
+) -> User:
+    _ensure_same_origin(request)
+    raw_token = data.get_token()
+    idinfo = await verify_google_id_token(raw_token)
+
+    email = idinfo.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account does not contain a verified email address.",
+        )
+    email = email.strip().casefold()
+    full_name = idinfo.get("name") or email.split("@")[0]
+    full_name = " ".join(full_name.split())[:100]
+    if not full_name:
+        full_name = "Google User"
+
+    token: str
+    user: User | None = None
+    async with SessionFactory.begin() as db:
+        user = await db.scalar(select(User).where(User.email == email))
+        if user is None:
+            # First-time Google user: create user record with dummy secure password hash
+            dummy_password = await asyncio.to_thread(password_hasher.hash, secrets.token_urlsafe(32))
+            user = User(
+                full_name=full_name,
+                email=email,
+                password_hash=dummy_password,
+                created_at=_utcnow(),
+            )
+            db.add(user)
+            await db.flush()
+        token = await _add_session(db, user.id)
+
     _set_session_cookie(response, token)
     return user
 

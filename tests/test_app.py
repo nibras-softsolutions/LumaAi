@@ -151,6 +151,45 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(login.status_code, 200)
         self.assertEqual((await self.client.get("/api/auth/me")).status_code, 200)
 
+    async def test_google_auth_flow(self):
+        self.client.cookies.clear()
+        mock_idinfo = {
+            "iss": "https://accounts.google.com",
+            "sub": "google-user-123",
+            "email": "google.user@example.com",
+            "name": "Google User",
+            "aud": auth.GOOGLE_WEB_CLIENT_ID,
+            "exp": 9999999999,
+        }
+        with patch("auth.verify_google_id_token", new_callable=AsyncMock) as mock_verify:
+            mock_verify.return_value = mock_idinfo
+            res = await self.client.post(
+                "/api/auth/google",
+                json={"id_token": "valid_token_xyz"},
+            )
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["email"], "google.user@example.com")
+            self.assertEqual(data["full_name"], "Google User")
+            self.assertIn(auth.SESSION_COOKIE, self.client.cookies)
+
+            # Session should be active
+            me_res = await self.client.get("/api/auth/me")
+            self.assertEqual(me_res.status_code, 200)
+            self.assertEqual(me_res.json()["id"], data["id"])
+
+            # Login again as existing Google user
+            res2 = await self.client.post(
+                "/api/auth/google",
+                json={"idToken": "valid_token_xyz"},
+            )
+            self.assertEqual(res2.status_code, 200)
+            self.assertEqual(res2.json()["id"], data["id"])
+
+        # Test missing token
+        bad_res = await self.client.post("/api/auth/google", json={})
+        self.assertEqual(bad_res.status_code, 400)
+
     async def test_invalid_credentials_and_unauthed_chat_are_rejected(self):
         self.client.cookies.clear()
         self.assertEqual(
