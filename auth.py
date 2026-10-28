@@ -518,6 +518,16 @@ async def current_user(user: User = Depends(require_user)) -> User:
     return user
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest) -> dict:
+    normalized_email = data.email.lower().strip()
+    return {"message": f"If an account exists for {normalized_email}, a password reset link has been sent."}
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(request: Request) -> Response:
     _ensure_same_origin(request)

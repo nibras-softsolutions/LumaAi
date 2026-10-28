@@ -5,8 +5,9 @@ public struct AuthView: View {
     @State private var showPhoneAuthAlert: Bool = false
     @State private var showEmailAuthSheet: Bool = false
 
-    public init(viewModel: AuthViewModel) {
+    public init(viewModel: AuthViewModel, startInEmailLogin: Bool = false) {
         self.viewModel = viewModel
+        self._showEmailAuthSheet = State(initialValue: startInEmailLogin)
     }
 
     public var body: some View {
@@ -145,9 +146,463 @@ public struct AuthView: View {
         } message: {
             Text("Phone number authentication requires an SMS OTP gateway which is not yet configured on the server. Please sign in with Google or your email account.")
         }
-        .sheet(isPresented: $showEmailAuthSheet) {
-            EmailAuthSheet(viewModel: viewModel, isPresented: $showEmailAuthSheet)
+        .fullScreenCover(isPresented: $showEmailAuthSheet) {
+            CinematicLoginView(viewModel: viewModel, isPresented: $showEmailAuthSheet)
         }
+    }
+}
+
+// MARK: - Cinematic Login Screen (Matches Target Reference Image 2)
+
+public struct CinematicLoginView: View {
+    @ObservedObject var viewModel: AuthViewModel
+    @Binding var isPresented: Bool
+
+    @State private var isPasswordVisible: Bool = false
+    @State private var showForgotPasswordDialog: Bool = false
+    @State private var resetEmailInput: String = ""
+
+    public init(viewModel: AuthViewModel, isPresented: Binding<Bool>) {
+        self.viewModel = viewModel
+        self._isPresented = isPresented
+    }
+
+    public var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                // 1. Full-screen Cinematic Dark Background
+                Color.black
+                    .ignoresSafeArea()
+
+                Image("CinematicSignInBackground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
+
+                // 2. Cinematic Gradient Overlay (Tuned for contrast and low-key portrait view)
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black.opacity(0.10), location: 0.24),
+                        .init(color: .black.opacity(0.50), location: 0.38),
+                        .init(color: .black.opacity(0.94), location: 0.48),
+                        .init(color: .black, location: 0.58)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .ignoresSafeArea()
+
+                // 3. Scrollable Content Layer
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Top spacing to position header below the man with glowing phone
+                        Spacer(minLength: max(340, geometry.size.height * 0.41))
+
+                        // Header (Welcome Back / Create Account)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(viewModel.mode == .signIn ? "Welcome Back" : "Create Account")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(Color.lumaYellowAccent)
+
+                            Text(viewModel.mode == .signIn
+                                 ? "Log in to continue your\nthoughtful conversations."
+                                 : "Join Luma AI to explore, think,\nand create.")
+                                .font(.system(size: 14.5, weight: .regular))
+                                .foregroundColor(.white.opacity(0.88))
+                                .lineSpacing(3.5)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 22)
+
+                        // Error Banner (if any)
+                        if let error = viewModel.errorMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 13))
+
+                                Text(error)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+
+                                Spacer()
+
+                                Button(action: {
+                                    viewModel.errorMessage = nil
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 16)
+                        }
+
+                        // Success/Status Banner (e.g. Password Reset)
+                        if let status = viewModel.statusMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 13))
+
+                                Text(status)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+
+                                Spacer()
+
+                                Button(action: {
+                                    viewModel.statusMessage = nil
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.green.opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 16)
+                        }
+
+                        // Form Fields
+                        VStack(spacing: 14) {
+                            if viewModel.mode == .register {
+                                CinematicDarkField(title: "Full Name") {
+                                    HStack {
+                                        TextField("", text: $viewModel.fullName, prompt: Text(verbatim: "e.g. Jane Doe").foregroundColor(.white.opacity(0.35)))
+                                            .font(.system(size: 15, weight: .regular))
+                                            .foregroundColor(.white)
+                                            .tint(Color.lumaYellowAccent)
+                                            .textContentType(.name)
+                                            .autocapitalization(.words)
+
+                                        Image(systemName: "person")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.white.opacity(0.45))
+                                    }
+                                }
+                            }
+
+                            // Email Address Field
+                            CinematicDarkField(title: "Email Address") {
+                                HStack {
+                                    TextField("", text: $viewModel.email, prompt: Text(verbatim: "you@example.com").foregroundColor(.white.opacity(0.35)))
+                                        .font(.system(size: 15, weight: .regular))
+                                        .foregroundColor(.white)
+                                        .tint(Color.lumaYellowAccent)
+                                        .keyboardType(.emailAddress)
+                                        .textContentType(.emailAddress)
+                                        .autocapitalization(.none)
+                                        .disableAutocorrection(true)
+
+                                    Image(systemName: "envelope")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.white.opacity(0.45))
+                                }
+                            }
+
+                            // Password Field with working Eye toggle
+                            CinematicDarkField(title: "Password") {
+                                HStack {
+                                    if isPasswordVisible {
+                                        TextField("", text: $viewModel.password, prompt: Text(verbatim: "Enter your password").foregroundColor(.white.opacity(0.35)))
+                                            .font(.system(size: 15, weight: .regular))
+                                            .foregroundColor(.white)
+                                            .tint(Color.lumaYellowAccent)
+                                            .textContentType(viewModel.mode == .signIn ? .password : .newPassword)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+                                    } else {
+                                        SecureField("", text: $viewModel.password, prompt: Text(verbatim: "Enter your password").foregroundColor(.white.opacity(0.35)))
+                                            .font(.system(size: 15, weight: .regular))
+                                            .foregroundColor(.white)
+                                            .tint(Color.lumaYellowAccent)
+                                            .textContentType(viewModel.mode == .signIn ? .password : .newPassword)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+                                    }
+
+                                    Button(action: {
+                                        isPasswordVisible.toggle()
+                                    }) {
+                                        Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.white.opacity(0.45))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 24)
+
+                        // Remember Me & Forgot Password Row
+                        HStack {
+                            Button(action: {
+                                HapticFeedback.selection()
+                                viewModel.rememberMe.toggle()
+                            }) {
+                                HStack(spacing: 8) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                            .stroke(Color.white.opacity(0.40), lineWidth: 1.5)
+                                            .frame(width: 18, height: 18)
+
+                                        if viewModel.rememberMe {
+                                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                                .fill(Color.lumaYellowAccent)
+                                                .frame(width: 18, height: 18)
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(.black)
+                                        }
+                                    }
+
+                                    Text("Remember me")
+                                        .font(.system(size: 13, weight: .regular))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
+
+                            Button(action: {
+                                HapticFeedback.light()
+                                resetEmailInput = viewModel.email
+                                showForgotPasswordDialog = true
+                            }) {
+                                Text("Forgot password?")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(Color.lumaYellowAccent)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 14)
+                        .padding(.bottom, 22)
+
+                        // Primary Action Button (Log In / Sign Up)
+                        Button(action: {
+                            HapticFeedback.medium()
+                            if !viewModel.isFormValid {
+                                if viewModel.email.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    viewModel.errorMessage = "Please enter your email address."
+                                    return
+                                }
+                                if viewModel.password.isEmpty {
+                                    viewModel.errorMessage = "Please enter your password."
+                                    return
+                                }
+                                if viewModel.password.count < 6 {
+                                    viewModel.errorMessage = "Password must be at least 6 characters."
+                                    return
+                                }
+                                return
+                            }
+                            Task {
+                                await viewModel.submit()
+                                if viewModel.errorMessage == nil {
+                                    isPresented = false
+                                }
+                            }
+                        }) {
+                            ZStack {
+                                Capsule()
+                                    .fill(Color.lumaYellowAccent)
+
+                                if viewModel.isLoading {
+                                    ProgressView()
+                                        .tint(.black)
+                                } else {
+                                    Text(viewModel.mode == .signIn ? "Log In" : "Sign Up")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.black)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 24)
+
+                        // OR Separator
+                        HStack(spacing: 16) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.18))
+                                .frame(height: 1)
+                            Text("OR")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.45))
+                            Rectangle()
+                                .fill(Color.white.opacity(0.18))
+                                .frame(height: 1)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 18)
+
+                        // Continue with Google Button
+                        Button(action: {
+                            HapticFeedback.light()
+                            Task {
+                                await viewModel.signInWithGoogle()
+                                if viewModel.errorMessage == nil {
+                                    isPresented = false
+                                }
+                            }
+                        }) {
+                            ZStack {
+                                Capsule()
+                                    .fill(Color(white: 0.05))
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                                    )
+
+                                if viewModel.isGoogleLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    HStack(spacing: 0) {
+                                        HStack(spacing: 0) {
+                                            Spacer()
+                                            GoogleIconView()
+                                            Spacer()
+                                        }
+                                        .frame(width: 58)
+
+                                        Rectangle()
+                                            .fill(Color.white.opacity(0.22))
+                                            .frame(width: 1, height: 20)
+
+                                        Text("Continue with Google")
+                                            .font(.system(size: 15.5, weight: .semibold))
+                                            .foregroundColor(.white)
+                                            .padding(.leading, 18)
+
+                                        Spacer()
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isLoading || viewModel.isGoogleLoading)
+                        .padding(.horizontal, 24)
+
+                        // Footer (Sign up / Log in link)
+                        Button(action: {
+                            HapticFeedback.selection()
+                            viewModel.toggleMode()
+                        }) {
+                            HStack(spacing: 5) {
+                                Text(viewModel.mode == .signIn ? "Don't have an account?" : "Already have an account?")
+                                    .foregroundColor(.white.opacity(0.65))
+                                Text(viewModel.mode == .signIn ? "Sign up" : "Log in")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color.lumaYellowAccent)
+                            }
+                            .font(.system(size: 13, weight: .regular))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 22)
+                        .padding(.bottom, max(32, geometry.safeAreaInsets.bottom + 16))
+                        .frame(maxWidth: .infinity)
+                    }
+                    .frame(width: geometry.size.width)
+                }
+                .scrollDismissesKeyboard(.interactively)
+
+                // 4. Fixed Top Header with < Back Button (Positioned safely below status bar)
+                HStack {
+                    Button(action: {
+                        HapticFeedback.light()
+                        isPresented = false
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Back")
+                                .font(.system(size: 16, weight: .regular))
+                        }
+                        .foregroundColor(.white)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 64)
+            }
+        }
+        .ignoresSafeArea()
+        .preferredColorScheme(.dark)
+        .alert("Forgot Password", isPresented: $showForgotPasswordDialog) {
+            TextField("you@example.com", text: $resetEmailInput)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .autocapitalization(.none)
+
+            Button("Cancel", role: .cancel) { }
+            Button("Send Reset Link") {
+                Task {
+                    _ = await viewModel.requestPasswordReset(emailToReset: resetEmailInput)
+                }
+            }
+        } message: {
+            Text("Enter your account email address to receive password reset instructions.")
+        }
+    }
+}
+
+// Retain EmailAuthSheet as an alias for backwards compatibility
+public typealias EmailAuthSheet = CinematicLoginView
+
+// MARK: - Cinematic Dark Input Field Container
+
+public struct CinematicDarkField<Content: View>: View {
+    let title: String
+    let trailingContent: Content
+
+    public init(title: String, @ViewBuilder trailingContent: () -> Content) {
+        self.title = title
+        self.trailingContent = trailingContent()
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 11.5, weight: .regular))
+                .foregroundColor(.white.opacity(0.55))
+
+            trailingContent
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 58)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        )
     }
 }
 
@@ -303,124 +758,6 @@ public struct GoogleLogoCanvas: View {
             var barPath = Path()
             barPath.addRect(CGRect(x: cx - 1, y: cy - lineWidth / 2, width: radius + 1, height: lineWidth))
             context.fill(barPath, with: .color(blue))
-        }
-    }
-}
-
-// MARK: - Email Authentication Sheet
-
-public struct EmailAuthSheet: View {
-    @ObservedObject var viewModel: AuthViewModel
-    @Binding var isPresented: Bool
-
-    public init(viewModel: AuthViewModel, isPresented: Binding<Bool>) {
-        self.viewModel = viewModel
-        self._isPresented = isPresented
-    }
-
-    public var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.lumaCanvas
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 24) {
-                        VStack(spacing: 8) {
-                            Text(viewModel.mode == .signIn ? "Sign in to Luma AI" : "Create your account")
-                                .font(LumaTypography.title)
-                                .foregroundColor(.lumaPrimaryText)
-
-                            Text(viewModel.mode == .signIn ? "Continue your thoughtful conversations" : "Your private space to think, create, and explore")
-                                .font(LumaTypography.subheadline)
-                                .foregroundColor(.lumaSecondaryText)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(.top, 20)
-
-                        VStack(spacing: 16) {
-                            if viewModel.mode == .register {
-                                LumaTextField(
-                                    "Full Name",
-                                    placeholder: "e.g. Jane Doe",
-                                    text: $viewModel.fullName,
-                                    textContentType: .name
-                                )
-                            }
-
-                            LumaTextField(
-                                "Email Address",
-                                placeholder: "you@example.com",
-                                text: $viewModel.email,
-                                keyboardType: .emailAddress,
-                                textContentType: .emailAddress
-                            )
-
-                            LumaTextField(
-                                "Password",
-                                placeholder: "••••••••",
-                                text: $viewModel.password,
-                                isSecure: true,
-                                textContentType: viewModel.mode == .signIn ? .password : .newPassword
-                            )
-
-                            if let error = viewModel.errorMessage {
-                                Text(error)
-                                    .font(LumaTypography.captionMedium)
-                                    .foregroundColor(.lumaError)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-
-                            LumaButton(
-                                viewModel.mode == .signIn ? "Sign In" : "Create Account",
-                                style: .primary,
-                                isLoading: viewModel.isLoading
-                            ) {
-                                Task {
-                                    await viewModel.submit()
-                                    if viewModel.errorMessage == nil {
-                                        isPresented = false
-                                    }
-                                }
-                            }
-                            .disabled(!viewModel.isFormValid || viewModel.isLoading)
-                            .opacity(viewModel.isFormValid && !viewModel.isLoading ? 1.0 : 0.5)
-                        }
-                        .padding(24)
-                        .background(Color.lumaSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.lumaBorder, lineWidth: 1)
-                        )
-                        .padding(.horizontal, 20)
-
-                        Button(action: {
-                            HapticFeedback.selection()
-                            viewModel.toggleMode()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text(viewModel.mode == .signIn ? "Don't have an account?" : "Already have an account?")
-                                    .foregroundColor(.lumaSecondaryText)
-                                Text(viewModel.mode == .signIn ? "Sign up" : "Sign in")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.lumaPrimaryText)
-                            }
-                            .font(LumaTypography.subheadline)
-                        }
-                        .padding(.bottom, 24)
-                    }
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        isPresented = false
-                    }
-                    .foregroundColor(.lumaPrimaryText)
-                }
-            }
         }
     }
 }

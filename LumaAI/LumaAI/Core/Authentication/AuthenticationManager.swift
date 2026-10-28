@@ -153,6 +153,21 @@ public final class AuthenticationManager: ObservableObject {
         }
     }
 
+    public func requestPasswordReset(email: String) async throws -> String {
+        authErrorMessage = nil
+        let req = ForgotPasswordRequest(email: email)
+        do {
+            let res: ForgotPasswordResponse = try await apiClient.request(.forgotPassword, body: req)
+            return res.message
+        } catch let err as NetworkError {
+            authErrorMessage = err.errorDescription
+            throw err
+        } catch {
+            authErrorMessage = error.localizedDescription
+            throw error
+        }
+    }
+
     public func logout() async {
         authErrorMessage = nil
         _ = try? await apiClient.request(.logout, body: nil) as ServerHealth

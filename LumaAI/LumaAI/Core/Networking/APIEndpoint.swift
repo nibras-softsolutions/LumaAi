@@ -20,6 +20,7 @@ public enum APIEndpoint {
     case googleAuth
     case me
     case logout
+    case forgotPassword
     case chatStream
     case generateImage
     case viewImage(id: String)
@@ -46,6 +47,8 @@ public enum APIEndpoint {
             return base.appendingPathComponent("api/auth/me")
         case .logout:
             return base.appendingPathComponent("api/auth/logout")
+        case .forgotPassword:
+            return base.appendingPathComponent("api/auth/forgot-password")
         case .chatStream:
             return base.appendingPathComponent("api/chat/stream")
         case .generateImage:
@@ -61,7 +64,7 @@ public enum APIEndpoint {
         switch self {
         case .health, .healthAI, .me, .viewImage:
             return "GET"
-        case .register, .login, .googleAuth, .logout, .chatStream, .generateImage, .transcribeVoice:
+        case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice:
             return "POST"
         }
     }
@@ -73,4 +76,16 @@ public struct GoogleAuthRequest: Codable {
     public init(idToken: String) {
         self.id_token = idToken
     }
+}
+
+public struct ForgotPasswordRequest: Codable {
+    public let email: String
+
+    public init(email: String) {
+        self.email = email
+    }
+}
+
+public struct ForgotPasswordResponse: Codable {
+    public let message: String
 }

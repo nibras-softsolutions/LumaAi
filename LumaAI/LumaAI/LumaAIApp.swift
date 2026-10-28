@@ -48,7 +48,10 @@ struct RootContentView: View {
                 }
                 .preferredColorScheme(.dark)
             } else if !appEnv.authManager.isAuthenticated {
-                AuthView(viewModel: AuthViewModel(authManager: appEnv.authManager))
+                AuthView(
+                    viewModel: AuthViewModel(authManager: appEnv.authManager),
+                    startInEmailLogin: CommandLine.arguments.contains("-showLogin")
+                )
             } else {
                 MainContainerView()
             }
