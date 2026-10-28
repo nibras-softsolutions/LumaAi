@@ -6,24 +6,31 @@ A thoughtful, privacy-first local AI workspace powered by **FastAPI**, **LangCha
 
 ## Features
 
-- **Local LLM Intelligence**: Powered by Ollama (default: `llama3.2`), streaming responses token-by-token using Server-Sent Events (SSE).
-- **Modern Responsive Interface**: Distraction-free design with onboarding flow, chat history, search, and collapsible sidebar.
+- **Native iOS App (SwiftUI & iOS 17+)**:
+  - **Live Camera-to-Text (OCR)**: Real-time on-device text recognition using Apple's Vision framework (`VNRecognizeTextRequest`) and `AVFoundation`, with live highlight bounding boxes, single-block tap-to-copy, and direct insertion into "Ask Luma".
+  - **Google Sign-In**: Native Google Sign-In powered by `GoogleSignIn-iOS` SDK with cryptographic server-side ID token verification.
+  - **Dynamic Multiline Composer**: Smart keyboard avoidance, auto-scrolling conversation feed, and interactive drag-to-dismiss.
+  - **Voice Conversations**: Real-time voice interaction with animated audio visualizer and speech recognition.
+  - **AI Image Generation**: Multi-aspect image synthesis with full-screen viewer and history.
+- **Local LLM Intelligence**: Powered by Ollama (default: `llama3.2`) or cloud providers, streaming responses token-by-token using Server-Sent Events (SSE).
+- **Modern Responsive Web Interface**: Distraction-free design with onboarding flow, chat history, search, and collapsible sidebar.
 - **Downloadable Code Generation**: Automatic intent detection format (`File: filename.ext`) with one-click code file download buttons.
 - **Enterprise-Grade Security**:
+  - Google OAuth ID token verification (issuer, signature, audience, expiration).
   - Password hashing with **Argon2** via `pwdlib`.
   - Secure session management with hashed tokens and HTTP-only cookies.
   - SameSite cookies and origin verification to defend against CSRF.
   - Brute-force rate limiting on authentication attempts.
   - Strict Content Security Policy (CSP) and Bleach-sanitized Markdown rendering.
 - **Database Flexibility**: Default local SQLite support (`sqlite+aiosqlite`) or managed cloud PostgreSQL (e.g., **Neon** via `asyncpg`).
-- **Decoupled Architecture**: Supports running as an integrated single-port app or with frontend and backend served on separate ports with CORS.
+- **Decoupled Architecture**: Supports running as an integrated single-port app, a Vercel-hosted frontend, or a native iOS SwiftUI client.
 
 ---
 
 ## Project Structure
 
 ```
-├── auth.py             # Authentication router, SQLAlchemy models, session management
+├── auth.py             # Authentication router, SQLAlchemy models, session management, Google OAuth
 ├── main.py             # FastAPI app, SSE chat streaming, Markdown rendering, CSP
 ├── requirements.txt    # Python dependencies
 ├── pytest.ini          # Pytest configuration
@@ -32,8 +39,21 @@ A thoughtful, privacy-first local AI workspace powered by **FastAPI**, **LangCha
 │   ├── index.html      # Single Page Application HTML
 │   ├── styles.css      # Design system styles
 │   └── app.js          # Client logic (SSE streaming, state, downloads)
-└── tests/
-    └── test_app.py     # Automated test suite (28 integration tests)
+├── tests/
+│   └── test_app.py     # Backend test suite (28 integration tests)
+└── LumaAI/             # Native iOS SwiftUI Application (iOS 17+)
+    ├── project.yml     # XcodeGen specification
+    ├── LumaAI/
+    │   ├── Core/       # Networking, Authentication (GoogleSignIn), Models
+    │   ├── DesignSystem/ # Typography, ColorPalette, HapticFeedback
+    │   └── Features/
+    │       ├── Authentication/ # Google Sign-In & Email/Password flows
+    │       ├── Chat/          # ChatView, multiline ComposerView, MarkdownView
+    │       ├── Scanner/       # LiveCameraService, LiveTextScannerView (Vision OCR)
+    │       ├── Voice/         # VoiceConversationView, SpeechRecognitionService
+    │       ├── ImageGeneration/ # ImageGenerationView, ImageViewerView
+    │       └── Settings/      # SettingsView, UserPreferences
+    └── LumaAITests/    # iOS unit test suite (23 unit tests)
 ```
 
 ---
