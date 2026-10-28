@@ -21,35 +21,32 @@ struct RootContentView: View {
 
     var body: some View {
         Group {
-            if !appEnv.userPreferences.hasCompletedOnboarding {
-                OnboardingView(preferences: appEnv.userPreferences) {
-                    appEnv.userPreferences.hasCompletedOnboarding = true
-                }
-            } else if appEnv.authManager.isRestoringSession {
+            if appEnv.authManager.isRestoringSession {
                 ZStack {
-                    Color.lumaCanvas
+                    Color.black
                         .ignoresSafeArea()
 
                     VStack(spacing: 20) {
                         Circle()
-                            .fill(Color.lumaSurfaceElevated)
+                            .fill(Color.white.opacity(0.12))
                             .frame(width: 72, height: 72)
                             .overlay(
                                 Image(systemName: "sparkle")
                                     .font(.system(size: 32, weight: .light))
-                                    .foregroundColor(.lumaPrimaryText)
+                                    .foregroundColor(.white)
                             )
 
                         Text("Luma AI")
                             .font(LumaTypography.title)
-                            .foregroundColor(.lumaPrimaryText)
+                            .foregroundColor(.white)
 
                         ProgressView()
-                            .tint(.lumaSecondaryText)
+                            .tint(.white.opacity(0.6))
                             .scaleEffect(0.9)
                             .padding(.top, 8)
                     }
                 }
+                .preferredColorScheme(.dark)
             } else if !appEnv.authManager.isAuthenticated {
                 AuthView(viewModel: AuthViewModel(authManager: appEnv.authManager))
             } else {
@@ -57,7 +54,11 @@ struct RootContentView: View {
             }
         }
         .task {
-            await appEnv.authManager.restoreSession()
+            if CommandLine.arguments.contains("-resetAuth") {
+                await appEnv.authManager.logout()
+            } else {
+                await appEnv.authManager.restoreSession()
+            }
         }
     }
 }

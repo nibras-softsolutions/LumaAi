@@ -160,6 +160,7 @@ public final class AuthenticationManager: ObservableObject {
         clearStoredSession()
         self.currentUser = nil
         self.isAuthenticated = false
+        self.isRestoringSession = false
     }
 
     private func cacheUser(_ user: User) {

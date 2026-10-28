@@ -18,6 +18,7 @@ public extension Color {
     // Accents
     static let lumaAccent = Color(red: 37/255, green: 99/255, blue: 235/255) // #2563EB
     static let lumaAccentLight = Color(red: 239/255, green: 246/255, blue: 255/255) // #EFF6FF
+    static let lumaYellowAccent = Color(red: 255/255, green: 196/255, blue: 61/255) // #FFC43D
 
     // Status
     static let lumaSuccess = Color(red: 22/255, green: 163/255, blue: 74/255)
