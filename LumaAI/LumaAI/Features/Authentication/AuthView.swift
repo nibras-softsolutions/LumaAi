@@ -161,6 +161,18 @@ public struct CinematicLoginView: View {
     @State private var isPasswordVisible: Bool = false
     @State private var showForgotPasswordDialog: Bool = false
     @State private var resetEmailInput: String = ""
+    @FocusState private var focusedField: AuthField?
+
+    enum AuthField: Hashable {
+        case fullName
+        case email
+        case password
+    }
+
+    private func hideKeyboard() {
+        focusedField = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 
     public init(viewModel: AuthViewModel, isPresented: Binding<Bool>) {
         self.viewModel = viewModel
@@ -288,6 +300,7 @@ public struct CinematicLoginView: View {
                                             .font(.system(size: 15, weight: .regular))
                                             .foregroundColor(.white)
                                             .tint(Color.lumaYellowAccent)
+                                            .focused($focusedField, equals: .fullName)
                                             .textContentType(.name)
                                             .autocapitalization(.words)
 
@@ -305,6 +318,7 @@ public struct CinematicLoginView: View {
                                         .font(.system(size: 15, weight: .regular))
                                         .foregroundColor(.white)
                                         .tint(Color.lumaYellowAccent)
+                                        .focused($focusedField, equals: .email)
                                         .keyboardType(.emailAddress)
                                         .textContentType(.emailAddress)
                                         .autocapitalization(.none)
@@ -324,6 +338,7 @@ public struct CinematicLoginView: View {
                                             .font(.system(size: 15, weight: .regular))
                                             .foregroundColor(.white)
                                             .tint(Color.lumaYellowAccent)
+                                            .focused($focusedField, equals: .password)
                                             .textContentType(viewModel.mode == .signIn ? .password : .newPassword)
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
@@ -332,6 +347,7 @@ public struct CinematicLoginView: View {
                                             .font(.system(size: 15, weight: .regular))
                                             .foregroundColor(.white)
                                             .tint(Color.lumaYellowAccent)
+                                            .focused($focusedField, equals: .password)
                                             .textContentType(viewModel.mode == .signIn ? .password : .newPassword)
                                             .autocapitalization(.none)
                                             .disableAutocorrection(true)
@@ -526,7 +542,15 @@ public struct CinematicLoginView: View {
                     }
                     .frame(width: geometry.size.width)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.immediately)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 4).onChanged { _ in
+                        hideKeyboard()
+                    }
+                )
+                .onTapGesture {
+                    hideKeyboard()
+                }
 
                 // 4. Fixed Top Header with < Back Button (Positioned safely below status bar)
                 HStack {

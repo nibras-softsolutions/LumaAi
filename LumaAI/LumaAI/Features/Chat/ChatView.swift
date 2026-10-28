@@ -220,7 +220,12 @@ public struct ChatView: View {
                 }
                 .frame(minHeight: geometry.size.height)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .scrollDismissesKeyboard(.immediately)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6).onChanged { _ in
+                    dismissKeyboard()
+                }
+            )
         }
     }
 
@@ -265,7 +270,12 @@ public struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 6).onChanged { _ in
+                dismissKeyboard()
+            }
+        )
         .defaultScrollAnchor(.bottom)
         .onAppear {
             scrollToBottom(proxy: proxy, animated: false)
