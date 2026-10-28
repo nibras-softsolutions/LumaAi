@@ -7,6 +7,7 @@ public struct ChatView: View {
     let onOpenSettings: () -> Void
 
     @State private var showingImageDetail: Bool = false
+    @State private var showingTextScanner: Bool = false
 
     public init(
         viewModel: ChatViewModel,
@@ -82,6 +83,10 @@ public struct ChatView: View {
                         viewModel.isImageMode.toggle()
                     }
                 },
+                onScanText: {
+                    dismissKeyboard()
+                    showingTextScanner = true
+                },
                 onStartVoice: onOpenVoice,
                 onSend: {
                     viewModel.sendMessage()
@@ -94,6 +99,25 @@ public struct ChatView: View {
         .background(Color.lumaCanvas.ignoresSafeArea())
         .sheet(item: $viewModel.selectedImageAttachment) { attachment in
             ImageViewerView(attachment: attachment)
+        }
+        .fullScreenCover(isPresented: $showingTextScanner) {
+            LiveTextScannerView(
+                onInsertText: { recognizedText in
+                    showingTextScanner = false
+                    DispatchQueue.main.async {
+                        let text = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { return }
+                        if viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            viewModel.inputText = text
+                        } else {
+                            viewModel.inputText += "\n" + text
+                        }
+                    }
+                },
+                onDismiss: {
+                    showingTextScanner = false
+                }
+            )
         }
     }
 

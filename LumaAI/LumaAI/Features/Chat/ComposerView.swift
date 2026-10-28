@@ -5,6 +5,7 @@ public struct ComposerView: View {
     let isStreaming: Bool
     let isImageMode: Bool
     let onToggleImageMode: () -> Void
+    let onScanText: () -> Void
     let onStartVoice: () -> Void
     let onSend: () -> Void
     let onStop: () -> Void
@@ -17,6 +18,7 @@ public struct ComposerView: View {
         isStreaming: Bool,
         isImageMode: Bool,
         onToggleImageMode: @escaping () -> Void,
+        onScanText: @escaping () -> Void,
         onStartVoice: @escaping () -> Void,
         onSend: @escaping () -> Void,
         onStop: @escaping () -> Void,
@@ -26,6 +28,7 @@ public struct ComposerView: View {
         self.isStreaming = isStreaming
         self.isImageMode = isImageMode
         self.onToggleImageMode = onToggleImageMode
+        self.onScanText = onScanText
         self.onStartVoice = onStartVoice
         self.onSend = onSend
         self.onStop = onStop
@@ -66,10 +69,23 @@ public struct ComposerView: View {
                     onToggleImageMode()
                 }) {
                     Image(systemName: isImageMode ? "photo.fill" : "photo")
-                        .font(.system(size: 18))
+                        .font(.system(size: 17))
                         .foregroundColor(isImageMode ? .lumaAccent : .lumaSecondaryText)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 36, height: 36)
                         .background(isImageMode ? Color.lumaAccentLight : Color.clear)
+                        .clipShape(Circle())
+                }
+
+                // Live Camera OCR Text Scanner Button
+                Button(action: {
+                    HapticFeedback.light()
+                    onScanText()
+                }) {
+                    Image(systemName: "text.viewfinder")
+                        .font(.system(size: 17))
+                        .foregroundColor(.lumaSecondaryText)
+                        .frame(width: 36, height: 36)
+                        .background(Color.clear)
                         .clipShape(Circle())
                 }
 
@@ -79,9 +95,9 @@ public struct ComposerView: View {
                     onStartVoice()
                 }) {
                     Image(systemName: "waveform")
-                        .font(.system(size: 18))
+                        .font(.system(size: 17))
                         .foregroundColor(.lumaSecondaryText)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 36, height: 36)
                         .background(Color.clear)
                         .clipShape(Circle())
                 }

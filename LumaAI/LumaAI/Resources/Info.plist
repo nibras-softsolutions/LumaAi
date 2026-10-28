@@ -37,6 +37,8 @@
 	<string>172474086048-ke3r4ekgdm0vcak48j1bvqqb6msrmubh.apps.googleusercontent.com</string>
 	<key>GIDServerClientID</key>
 	<string>172474086048-02bpfth3nc9md882lhc22bkfl2raojpd.apps.googleusercontent.com</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Luma AI uses the camera to scan and recognize text in real time.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Luma AI uses the microphone for voice conversations with the AI assistant.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
