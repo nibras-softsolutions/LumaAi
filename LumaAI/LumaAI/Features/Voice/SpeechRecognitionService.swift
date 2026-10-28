@@ -60,7 +60,7 @@ public final class SpeechRecognitionService: ObservableObject {
         stopRecording()
 
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
+        try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()

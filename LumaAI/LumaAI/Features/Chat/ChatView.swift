@@ -21,64 +21,77 @@ public struct ChatView: View {
     }
 
     public var body: some View {
-        ZStack {
-            Color.lumaCanvas
-                .ignoresSafeArea()
+        VStack(spacing: 0) {
+            // Top Navigation Bar
+            navigationHeader
 
-            VStack(spacing: 0) {
-                // Top Navigation Bar
-                navigationHeader
+            Divider()
 
-                Divider()
-
-                // Messages Scroll Area
-                if viewModel.conversation.messages.isEmpty {
-                    emptyChatGreeting
-                } else {
-                    messageScrollView
-                }
-
-                // Error Banner if present
-                if let error = viewModel.errorMessage {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(.lumaError)
-                        Text(error)
-                            .font(LumaTypography.caption)
-                            .foregroundColor(.lumaError)
-                        Spacer()
-                        Button(action: { viewModel.errorMessage = nil }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 11))
-                                .foregroundColor(.lumaSecondaryText)
+            // Main Conversation Area
+            ScrollViewReader { proxy in
+                ZStack {
+                    // Tap-to-dismiss background
+                    Color.lumaCanvas
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            dismissKeyboard()
                         }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.lumaError.opacity(0.1))
-                }
 
-                // Bottom Composer
-                ComposerView(
-                    text: $viewModel.inputText,
-                    isStreaming: viewModel.isStreaming,
-                    isImageMode: viewModel.isImageMode,
-                    onToggleImageMode: {
-                        withAnimation(.spring(response: 0.25)) {
-                            viewModel.isImageMode.toggle()
-                        }
-                    },
-                    onStartVoice: onOpenVoice,
-                    onSend: {
-                        viewModel.sendMessage()
-                    },
-                    onStop: {
-                        viewModel.stopStreaming()
+                    if viewModel.conversation.messages.isEmpty {
+                        emptyChatGreeting
+                    } else {
+                        messageScrollView(proxy: proxy)
                     }
-                )
+                }
+                .onChange(of: viewModel.conversation.messages.count) { _ in
+                    scrollToBottom(proxy: proxy)
+                }
+                .onChange(of: viewModel.conversation.messages.last?.content) { _ in
+                    scrollToBottom(proxy: proxy, animated: false)
+                }
             }
+
+            // Error Banner if present
+            if let error = viewModel.errorMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.lumaError)
+                    Text(error)
+                        .font(LumaTypography.caption)
+                        .foregroundColor(.lumaError)
+                    Spacer()
+                    Button(action: { viewModel.errorMessage = nil }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11))
+                            .foregroundColor(.lumaSecondaryText)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.lumaError.opacity(0.1))
+            }
+
+            // Bottom Composer
+            ComposerView(
+                text: $viewModel.inputText,
+                isStreaming: viewModel.isStreaming,
+                isImageMode: viewModel.isImageMode,
+                onToggleImageMode: {
+                    withAnimation(.spring(response: 0.25)) {
+                        viewModel.isImageMode.toggle()
+                    }
+                },
+                onStartVoice: onOpenVoice,
+                onSend: {
+                    viewModel.sendMessage()
+                },
+                onStop: {
+                    viewModel.stopStreaming()
+                }
+            )
         }
+        .background(Color.lumaCanvas.ignoresSafeArea())
         .sheet(item: $viewModel.selectedImageAttachment) { attachment in
             ImageViewerView(attachment: attachment)
         }
@@ -88,6 +101,7 @@ public struct ChatView: View {
         HStack(spacing: 12) {
             Button(action: {
                 HapticFeedback.light()
+                dismissKeyboard()
                 onOpenHistory()
             }) {
                 Image(systemName: "sidebar.left")
@@ -113,6 +127,7 @@ public struct ChatView: View {
 
             Button(action: {
                 HapticFeedback.light()
+                dismissKeyboard()
                 viewModel.startNewConversation()
             }) {
                 Image(systemName: "square.and.pencil")
@@ -125,6 +140,7 @@ public struct ChatView: View {
 
             Button(action: {
                 HapticFeedback.light()
+                dismissKeyboard()
                 onOpenSettings()
             }) {
                 Image(systemName: "slider.horizontal.3")
@@ -141,46 +157,53 @@ public struct ChatView: View {
     }
 
     private var emptyChatGreeting: some View {
-        VStack(spacing: 28) {
-            Spacer()
+        GeometryReader { geometry in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 24) {
+                    Spacer(minLength: 16)
 
-            Circle()
-                .fill(Color.lumaSurfaceElevated)
-                .frame(width: 72, height: 72)
-                .overlay(
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 32, weight: .light))
-                        .foregroundColor(.lumaPrimaryText)
-                )
+                    Circle()
+                        .fill(Color.lumaSurfaceElevated)
+                        .frame(width: 64, height: 64)
+                        .overlay(
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 28, weight: .light))
+                                .foregroundColor(.lumaPrimaryText)
+                        )
 
-            VStack(spacing: 8) {
-                Text("How can I help you think today?")
-                    .font(LumaTypography.title)
-                    .foregroundColor(.lumaPrimaryText)
-                    .multilineTextAlignment(.center)
+                    VStack(spacing: 8) {
+                        Text("How can I help you think today?")
+                            .font(LumaTypography.title)
+                            .foregroundColor(.lumaPrimaryText)
+                            .multilineTextAlignment(.center)
 
-                Text("Ask questions, explore complex topics, generate code, or create artwork.")
-                    .font(LumaTypography.subheadline)
-                    .foregroundColor(.lumaSecondaryText)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                        Text("Ask questions, explore complex topics, generate code, or create artwork.")
+                            .font(LumaTypography.subheadline)
+                            .foregroundColor(.lumaSecondaryText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+
+                    // Quick Starter Suggestions
+                    VStack(spacing: 10) {
+                        promptStarter("Explain quantum computing in simple terms")
+                        promptStarter("Write a Swift function to debounce network calls")
+                        promptStarter("Generate an image of a serene mountain lake at dawn")
+                    }
+                    .padding(.horizontal, 20)
+
+                    Spacer(minLength: 16)
+                }
+                .frame(minHeight: geometry.size.height)
             }
-
-            // Quick Starter Suggestions
-            VStack(spacing: 10) {
-                promptStarter("Explain quantum computing in simple terms")
-                promptStarter("Write a Swift function to debounce network calls")
-                promptStarter("Generate an image of a serene mountain lake at dawn")
-            }
-            .padding(.horizontal, 24)
-
-            Spacer()
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
     private func promptStarter(_ prompt: String) -> some View {
         Button(action: {
             HapticFeedback.light()
+            dismissKeyboard()
             viewModel.inputText = prompt
             viewModel.sendMessage()
         }) {
@@ -205,24 +228,38 @@ public struct ChatView: View {
         .buttonStyle(.plain)
     }
 
-    private var messageScrollView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.conversation.messages) { message in
-                        MessageBubbleView(message: message) { attachment in
-                            viewModel.selectedImageAttachment = attachment
-                        }
-                        .id(message.id)
+    private func messageScrollView(proxy: ScrollViewProxy) -> some View {
+        ScrollView(.vertical) {
+            LazyVStack(spacing: 12) {
+                ForEach(viewModel.conversation.messages) { message in
+                    MessageBubbleView(message: message) { attachment in
+                        viewModel.selectedImageAttachment = attachment
                     }
-                }
-                .padding(.vertical, 16)
-            }
-            .onChange(of: viewModel.conversation.messages.last?.content) { _ in
-                if let last = viewModel.conversation.messages.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
+                    .id(message.id)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .defaultScrollAnchor(.bottom)
+        .onAppear {
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+        guard let last = viewModel.conversation.messages.last else { return }
+        if animated {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }

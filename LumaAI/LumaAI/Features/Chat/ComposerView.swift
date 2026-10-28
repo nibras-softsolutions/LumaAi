@@ -8,6 +8,7 @@ public struct ComposerView: View {
     let onStartVoice: () -> Void
     let onSend: () -> Void
     let onStop: () -> Void
+    var onFocusChange: ((Bool) -> Void)?
 
     @FocusState private var isFocused: Bool
 
@@ -18,7 +19,8 @@ public struct ComposerView: View {
         onToggleImageMode: @escaping () -> Void,
         onStartVoice: @escaping () -> Void,
         onSend: @escaping () -> Void,
-        onStop: @escaping () -> Void
+        onStop: @escaping () -> Void,
+        onFocusChange: ((Bool) -> Void)? = nil
     ) {
         self._text = text
         self.isStreaming = isStreaming
@@ -27,6 +29,7 @@ public struct ComposerView: View {
         self.onStartVoice = onStartVoice
         self.onSend = onSend
         self.onStop = onStop
+        self.onFocusChange = onFocusChange
     }
 
     public var body: some View {
@@ -83,25 +86,22 @@ public struct ComposerView: View {
                         .clipShape(Circle())
                 }
 
-                // Text Field
-                ZStack(alignment: .leading) {
-                    if text.isEmpty {
-                        Text(isImageMode ? "Describe the image to generate…" : "Message Luma AI…")
-                            .font(LumaTypography.body)
-                            .foregroundColor(.lumaTertiaryText)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 8)
-                    }
-
-                    TextEditor(text: $text)
-                        .font(LumaTypography.body)
-                        .foregroundColor(.lumaPrimaryText)
-                        .scrollContentBackground(.hidden)
-                        .focused($isFocused)
-                        .frame(minHeight: 38, maxHeight: 120)
-                        .fixedSize(horizontal: false, vertical: true)
+                // Multiline Text Field
+                TextField(
+                    isImageMode ? "Describe the image to generate…" : "Message Luma AI…",
+                    text: $text,
+                    axis: .vertical
+                )
+                .font(LumaTypography.body)
+                .foregroundColor(.lumaPrimaryText)
+                .focused($isFocused)
+                .lineLimit(1...5)
+                .frame(minHeight: 38)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
+                .onChange(of: isFocused) { focused in
+                    onFocusChange?(focused)
                 }
-                .padding(.horizontal, 8)
 
                 // Send / Stop Button
                 if isStreaming {
@@ -120,7 +120,7 @@ public struct ComposerView: View {
                     }
                 } else {
                     Button(action: {
-                        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        guard canSend else { return }
                         HapticFeedback.light()
                         onSend()
                     }) {
@@ -146,7 +146,8 @@ public struct ComposerView: View {
             )
             .padding(.horizontal, 16)
         }
-        .padding(.vertical, 8)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
         .background(Color.lumaCanvas)
     }
 
