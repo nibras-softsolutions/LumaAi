@@ -2,7 +2,6 @@ import SwiftUI
 
 public struct AuthView: View {
     @ObservedObject var viewModel: AuthViewModel
-    @State private var showPhoneAuthAlert: Bool = false
     @State private var showEmailAuthSheet: Bool = false
 
     public init(viewModel: AuthViewModel, startInEmailLogin: Bool = false) {
@@ -80,7 +79,7 @@ public struct AuthView: View {
                             .font(.system(size: 38, weight: .bold))
                             .foregroundColor(Color.lumaYellowAccent)
 
-                        Text("Sign in with any of your Google account or phone and\nset your password through app.")
+                        Text("Sign in with any of your Google account or email and\nset your password through app.")
                             .font(.system(size: 12.5, weight: .regular))
                             .foregroundColor(.white.opacity(0.88))
                             .lineSpacing(4)
@@ -104,48 +103,25 @@ public struct AuthView: View {
                         }
                         .disabled(viewModel.isLoading || viewModel.isGoogleLoading)
 
-                        // Continue with Phone Button
+                        // Continue with Email Button
                         CinematicPillButton(
-                            title: "Continue with Phone",
-                            iconType: .phone,
+                            title: "Continue with Email",
+                            iconType: .email,
                             isLoading: false
                         ) {
                             HapticFeedback.light()
-                            showPhoneAuthAlert = true
+                            showEmailAuthSheet = true
                         }
                         .disabled(viewModel.isLoading || viewModel.isGoogleLoading)
                     }
                     .padding(.horizontal, 24)
-
-                    // Subtle Email Sign-In Option
-                    Button(action: {
-                        HapticFeedback.selection()
-                        showEmailAuthSheet = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Text("Or continue with email")
-                                .foregroundColor(.white.opacity(0.50))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.35))
-                        }
-                        .font(LumaTypography.captionMedium)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .padding(.top, 10)
-                    .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 8 : 24)
+                    .padding(.bottom, max(36, geometry.safeAreaInsets.bottom + 16))
                 }
                 .frame(width: geometry.size.width)
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
-        .alert("Phone Sign-In", isPresented: $showPhoneAuthAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Phone number authentication requires an SMS OTP gateway which is not yet configured on the server. Please sign in with Google or your email account.")
-        }
         .fullScreenCover(isPresented: $showEmailAuthSheet) {
             CinematicLoginView(viewModel: viewModel, isPresented: $showEmailAuthSheet)
         }
@@ -634,6 +610,7 @@ public struct CinematicDarkField<Content: View>: View {
 
 public enum CinematicButtonIcon {
     case google
+    case email
     case phone
 }
 
@@ -679,6 +656,10 @@ public struct CinematicPillButton: View {
                                 switch iconType {
                                 case .google:
                                     GoogleIconView()
+                                case .email:
+                                    Image(systemName: "envelope.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.black)
                                 case .phone:
                                     PhoneIconView()
                                 }
