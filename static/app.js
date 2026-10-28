@@ -1171,6 +1171,141 @@ function showOnboarding(step = 0, pushHistory = true) {
   }
 }
 
+const GOOGLE_WEB_CLIENT_ID =
+  "172474086048-02bpfth3nc9md882lhc22bkfl2raojpd.apps.googleusercontent.com";
+
+let googleLibraryInitialized = false;
+let isGoogleAuthLoading = false;
+
+function setGoogleAuthLoading(loading, message = "Signing in with Google…") {
+  isGoogleAuthLoading = loading;
+  const loginSubmit = document.querySelector("#loginSubmit");
+  const regSubmit = document.querySelector("#registerSubmit");
+  if (loginSubmit) loginSubmit.disabled = loading;
+  if (regSubmit) regSubmit.disabled = loading;
+
+  document.querySelectorAll(".google-custom-btn").forEach((btn) => {
+    btn.disabled = loading;
+  });
+
+  if (loading) {
+    showAuthMessage(message, "status");
+  } else {
+    showAuthMessage("");
+  }
+}
+
+async function handleGoogleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    showAuthMessage("Google authentication could not be completed. Please try again.");
+    return;
+  }
+
+  showAuthMessage("");
+  const loginMsg = document.querySelector("#loginMessage");
+  if (loginMsg) loginMsg.textContent = "";
+  const regMsg = document.querySelector("#registerMessage");
+  if (regMsg) regMsg.textContent = "";
+
+  setGoogleAuthLoading(true, "Signing in with Google…");
+
+  try {
+    const res = await apiFetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: response.credential }),
+    });
+
+    let result = null;
+    try {
+      result = await res.json();
+    } catch {}
+
+    if (!res.ok) {
+      let errorMsg = "Google sign-in failed. Please try again.";
+      if (res.status === 401) {
+        errorMsg =
+          result && typeof result.detail === "string"
+            ? result.detail
+            : "Google account verification failed. Please try again.";
+      } else if (res.status === 403) {
+        errorMsg = "This request could not be verified. Please refresh and try again.";
+      } else if (result && typeof result.detail === "string") {
+        errorMsg = result.detail;
+      }
+      showAuthMessage(errorMsg);
+      if (loginMsg) loginMsg.textContent = errorMsg;
+      if (regMsg) regMsg.textContent = errorMsg;
+      return;
+    }
+
+    showChat(result);
+    showToast("Signed in with Google.");
+  } catch (err) {
+    console.error("Google sign-in network error:", err);
+    const networkMsg = "Unable to reach Luma AI. Check that the server is running and try again.";
+    showAuthMessage(networkMsg);
+    if (loginMsg) loginMsg.textContent = networkMsg;
+    if (regMsg) regMsg.textContent = networkMsg;
+  } finally {
+    setGoogleAuthLoading(false);
+  }
+}
+
+function initGoogleSignIn() {
+  if (typeof google === "undefined" || !google.accounts || !google.accounts.id) {
+    return;
+  }
+  if (!googleLibraryInitialized) {
+    try {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_WEB_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+      googleLibraryInitialized = true;
+    } catch (err) {
+      console.warn("Error initializing Google Identity Services:", err);
+      return;
+    }
+  }
+  renderAllGoogleButtons();
+}
+
+function renderAllGoogleButtons() {
+  if (!googleLibraryInitialized || typeof google === "undefined" || !google.accounts?.id) {
+    return;
+  }
+
+  const slotIds = ["googleSlotLanding", "googleSlotLogin", "googleSlotRegister"];
+  for (const slotId of slotIds) {
+    const slot = document.querySelector(`#${slotId}`);
+    if (!slot) continue;
+
+    const panel = slot.closest(".auth-card");
+    if (panel && panel.hidden) continue;
+
+    const cardWidth = panel?.clientWidth || 360;
+    const btnWidth = Math.min(360, Math.max(220, cardWidth - 54));
+
+    try {
+      slot.innerHTML = "";
+      google.accounts.id.renderButton(slot, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width: btnWidth,
+      });
+    } catch (err) {
+      console.warn(`Error rendering Google button in #${slotId}:`, err);
+    }
+  }
+}
+
 function showAuth(page = "landing", pushHistory = true) {
   shell.hidden = true;
   onboardingView.hidden = true;
@@ -1194,6 +1329,9 @@ function showAuth(page = "landing", pushHistory = true) {
       history.pushState({ lumaView: "auth", page }, "", location.pathname);
     } catch {}
   }
+  window.requestAnimationFrame(() => {
+    initGoogleSignIn();
+  });
 }
 
 function onboardingCompleted() {
@@ -1433,6 +1571,11 @@ async function logout() {
   window.clearInterval(healthInterval);
   settingsDialog.close();
   showAuth("landing");
+  if (typeof google !== "undefined" && google.accounts?.id) {
+    try {
+      google.accounts.id.disableAutoSelect();
+    } catch {}
+  }
 }
 
 function setConnectionStatus(status) {
@@ -2906,5 +3049,40 @@ document.querySelector("#registerForm").addEventListener("submit", (event) => {
 document.querySelectorAll("[data-password-toggle]").forEach((button) => {
   button.addEventListener("click", () => passwordToggle(button));
 });
+
+document.querySelectorAll(".google-custom-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (isGoogleAuthLoading) return;
+    if (typeof google !== "undefined" && google.accounts?.id) {
+      initGoogleSignIn();
+      try {
+        google.accounts.id.prompt();
+      } catch (err) {
+        console.warn("Google prompt error:", err);
+      }
+    } else {
+      showAuthMessage(
+        "Google Sign-In is unavailable. Please check your internet connection or ad blocker, or log in with email."
+      );
+    }
+  });
+});
+
+window.onGoogleLibraryLoad = function () {
+  initGoogleSignIn();
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    initGoogleSignIn();
+    window.setTimeout(initGoogleSignIn, 500);
+    window.setTimeout(initGoogleSignIn, 1500);
+  });
+} else {
+  initGoogleSignIn();
+  window.setTimeout(initGoogleSignIn, 500);
+  window.setTimeout(initGoogleSignIn, 1500);
+}
+
 window.addEventListener("popstate", handleExperiencePopState);
 initializeExperience();

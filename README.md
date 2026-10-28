@@ -162,6 +162,30 @@ If you prefer direct client-side requests:
 
 ---
 
+## Google Sign-In (Cross-Platform)
+
+Luma AI supports seamless **Continue with Google** authentication across both the web and native iOS apps, sharing a unified user database and session security architecture.
+
+### Unified Account Linking
+- **Single Account Identity**: Signing in with `user@gmail.com` on either web or iOS connects to the exact same account, preserving conversation history and profile data.
+- **Email/Password Coexistence**: If an account was previously created with email/password, signing in via Google with that same email safely links to the existing user record without creating duplicates.
+- **Server-Side Cryptographic Verification**: The backend validates Google ID tokens against Google's public keys, verifying audience, issuer (`accounts.google.com`), and expiration.
+
+### OAuth Client IDs
+- **Google Web Client ID**: `172474086048-02bpfth3nc9md882lhc22bkfl2raojpd.apps.googleusercontent.com`
+- **Google iOS Client ID**: `172474086048-ke3r4ekgdm0vcak48j1bvqqb6msrmubh.apps.googleusercontent.com`
+
+### Google Cloud Console Configuration
+Ensure the following Authorized JavaScript Origins are added to the Web Client ID in the Google Cloud Console:
+- `https://luma-ai-bay.vercel.app`
+- `https://lumaai-j0u3.onrender.com`
+- `http://localhost:8000`
+- `http://127.0.0.1:8000`
+- `http://localhost:8765`
+- `http://127.0.0.1:8765`
+
+---
+
 ## License
 
 MIT License.

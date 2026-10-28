@@ -82,6 +82,9 @@ _default_origins = [
     "http://localhost:8765",
     "http://127.0.0.1:8000",
     "http://localhost:8000",
+    "https://luma-ai-bay.vercel.app",
+    "https://luma-ai.vercel.app",
+    "https://lumaai-j0u3.onrender.com",
 ]
 _env_origins = os.getenv("ALLOWED_ORIGINS")
 if _env_origins:
@@ -338,7 +341,13 @@ async def verify_google_id_token(token: str) -> dict:
             google_requests.Request(),
         )
         aud = idinfo.get("aud")
-        if aud not in ALLOWED_GOOGLE_AUDIENCES:
+        if isinstance(aud, (list, tuple, set)):
+            if not any(a in ALLOWED_GOOGLE_AUDIENCES for a in aud):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Google ID token audience '{aud}' not allowed.",
+                )
+        elif aud not in ALLOWED_GOOGLE_AUDIENCES:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Google ID token audience '{aud}' not allowed.",
@@ -379,7 +388,13 @@ async def verify_google_id_token(token: str) -> dict:
 
     idinfo = resp.json()
     aud = idinfo.get("aud")
-    if aud not in ALLOWED_GOOGLE_AUDIENCES:
+    if isinstance(aud, (list, tuple, set)):
+        if not any(a in ALLOWED_GOOGLE_AUDIENCES for a in aud):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Google ID token audience '{aud}' not allowed.",
+            )
+    elif aud not in ALLOWED_GOOGLE_AUDIENCES:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Google ID token audience '{aud}' not allowed.",

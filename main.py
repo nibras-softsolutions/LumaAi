@@ -209,10 +209,17 @@ markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    connect_sources = " ".join(["'self'"] + sorted(ALLOWED_ORIGINS) + ["https://*.vercel.app"])
+    connect_sources = " ".join(
+        ["'self'"] + sorted(ALLOWED_ORIGINS) + ["https://*.vercel.app", "https://accounts.google.com"]
+    )
     response.headers["Content-Security-Policy"] = (
-        f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        f"img-src 'self' data:; connect-src {connect_sources}; object-src 'none'; "
+        f"default-src 'self'; "
+        f"script-src 'self' https://accounts.google.com; "
+        f"style-src 'self' 'unsafe-inline' https://accounts.google.com; "
+        f"img-src 'self' data: https://*.googleusercontent.com https://accounts.google.com; "
+        f"connect-src {connect_sources}; "
+        f"frame-src 'self' https://accounts.google.com; "
+        f"object-src 'none'; "
         f"base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"

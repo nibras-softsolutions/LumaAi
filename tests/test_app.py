@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from langchain_core.messages import AIMessageChunk, HumanMessage, SystemMessage
@@ -189,6 +189,131 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         # Test missing token
         bad_res = await self.client.post("/api/auth/google", json={})
         self.assertEqual(bad_res.status_code, 400)
+
+    async def test_google_auth_account_linking_and_cross_platform(self):
+        """Test account linkage between email/password registration and Google Sign-In across iOS and Web."""
+        self.client.cookies.clear()
+        linked_email = "linked.account@example.com"
+
+        # 1. Register account with email & password
+        reg = await self.client.post(
+            "/api/auth/register",
+            json={
+                "full_name": "Linked User",
+                "email": linked_email,
+                "password": "Password12345!",
+            },
+        )
+        self.assertEqual(reg.status_code, 201)
+        original_user_id = reg.json()["id"]
+
+        # Logout
+        await self.client.post("/api/auth/logout")
+        self.client.cookies.clear()
+
+        # 2. Sign in via Web Google OAuth (aud = GOOGLE_WEB_CLIENT_ID)
+        web_mock = {
+            "iss": "https://accounts.google.com",
+            "sub": "web-sub-12345",
+            "email": linked_email,
+            "name": "Linked User Web",
+            "aud": auth.GOOGLE_WEB_CLIENT_ID,
+            "exp": 9999999999,
+        }
+        with patch("auth.verify_google_id_token", new_callable=AsyncMock) as mock_verify:
+            mock_verify.return_value = web_mock
+            res_web = await self.client.post(
+                "/api/auth/google",
+                json={"id_token": "mock_web_token"},
+            )
+            self.assertEqual(res_web.status_code, 200)
+            self.assertEqual(res_web.json()["id"], original_user_id)
+            self.assertEqual(res_web.json()["email"], linked_email)
+
+            # Check active session on me
+            me_web = await self.client.get("/api/auth/me")
+            self.assertEqual(me_web.status_code, 200)
+            self.assertEqual(me_web.json()["id"], original_user_id)
+
+        # Logout
+        await self.client.post("/api/auth/logout")
+        self.client.cookies.clear()
+
+        # 3. Sign in via iOS Google OAuth (aud = GOOGLE_IOS_CLIENT_ID)
+        ios_mock = {
+            "iss": "accounts.google.com",
+            "sub": "ios-sub-12345",
+            "email": linked_email,
+            "name": "Linked User iOS",
+            "aud": auth.GOOGLE_IOS_CLIENT_ID,
+            "exp": 9999999999,
+        }
+        with patch("auth.verify_google_id_token", new_callable=AsyncMock) as mock_verify:
+            mock_verify.return_value = ios_mock
+            res_ios = await self.client.post(
+                "/api/auth/google",
+                json={"id_token": "mock_ios_token"},
+            )
+            self.assertEqual(res_ios.status_code, 200)
+            # Must link to the exact same user ID as web and password registration
+            self.assertEqual(res_ios.json()["id"], original_user_id)
+            self.assertEqual(res_ios.json()["email"], linked_email)
+
+    async def test_google_id_token_verification_validation(self):
+        """Test token verification validation rules (aud, iss, exp)."""
+        # Invalid audience
+        invalid_aud_token = {
+            "iss": "https://accounts.google.com",
+            "aud": "unauthorized-client-id.apps.googleusercontent.com",
+            "exp": 9999999999,
+            "email": "test@example.com",
+        }
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = invalid_aud_token
+            mock_get.return_value = mock_resp
+
+            with self.assertRaises(auth.HTTPException) as ctx:
+                await auth.verify_google_id_token("fake_token")
+            self.assertEqual(ctx.exception.status_code, 401)
+            self.assertIn("not allowed", ctx.exception.detail)
+
+        # Invalid issuer
+        invalid_iss_token = {
+            "iss": "https://attacker.com",
+            "aud": auth.GOOGLE_WEB_CLIENT_ID,
+            "exp": 9999999999,
+            "email": "test@example.com",
+        }
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = invalid_iss_token
+            mock_get.return_value = mock_resp
+
+            with self.assertRaises(auth.HTTPException) as ctx:
+                await auth.verify_google_id_token("fake_token")
+            self.assertEqual(ctx.exception.status_code, 401)
+            self.assertIn("issuer", ctx.exception.detail)
+
+        # Expired token
+        expired_token = {
+            "iss": "https://accounts.google.com",
+            "aud": auth.GOOGLE_WEB_CLIENT_ID,
+            "exp": 1000000000,  # Far past
+            "email": "test@example.com",
+        }
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = expired_token
+            mock_get.return_value = mock_resp
+
+            with self.assertRaises(auth.HTTPException) as ctx:
+                await auth.verify_google_id_token("fake_token")
+            self.assertEqual(ctx.exception.status_code, 401)
+            self.assertIn("expired", ctx.exception.detail)
 
     async def test_invalid_credentials_and_unauthed_chat_are_rejected(self):
         self.client.cookies.clear()
