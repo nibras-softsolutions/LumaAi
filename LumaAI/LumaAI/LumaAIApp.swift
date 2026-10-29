@@ -61,6 +61,11 @@ struct RootContentView: View {
                 await appEnv.authManager.logout()
             } else if CommandLine.arguments.contains("-mockAuth") {
                 appEnv.authManager.setMockAuthenticatedUser()
+                if CommandLine.arguments.contains("-showSettings") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        appEnv.showingSettings = true
+                    }
+                }
             } else {
                 await appEnv.authManager.restoreSession()
             }

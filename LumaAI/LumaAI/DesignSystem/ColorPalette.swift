@@ -24,4 +24,12 @@ public extension Color {
     static let lumaSuccess = Color(red: 22/255, green: 163/255, blue: 74/255)
     static let lumaError = Color(red: 220/255, green: 38/255, blue: 38/255)
     static let lumaWarning = Color(red: 217/255, green: 119/255, blue: 6/255)
+
+    // Recommended Settings Palette
+    static let settingsBackground = Color(red: 248/255, green: 247/255, blue: 243/255) // #F8F7F3
+    static let settingsCard = Color.white // #FFFFFF
+    static let settingsPrimaryText = Color(red: 28/255, green: 28/255, blue: 28/255) // #1C1C1C
+    static let settingsSecondaryText = Color(red: 111/255, green: 111/255, blue: 111/255) // #6F6F6F
+    static let settingsSectionLabel = Color(red: 119/255, green: 115/255, blue: 111/255) // #77736F
+    static let settingsDivider = Color(red: 228/255, green: 225/255, blue: 221/255) // #E4E1DD
 }
