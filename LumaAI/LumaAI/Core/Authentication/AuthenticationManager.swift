@@ -63,6 +63,14 @@ public final class AuthenticationManager: ObservableObject {
         }
     }
 
+    public func setMockAuthenticatedUser() {
+        let mock = User(id: "usr_luma_user", fullName: "Nibras", email: "nibras@luma.local")
+        self.currentUser = mock
+        self.isAuthenticated = true
+        self.isRestoringSession = false
+        cacheUser(mock)
+    }
+
     public func signInWithGoogle(presentingViewController: UIViewController? = nil) async throws {
         authErrorMessage = nil
 

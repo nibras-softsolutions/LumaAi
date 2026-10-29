@@ -139,38 +139,50 @@ public struct MessageBubbleView: View {
             onImageTapped?(attachment)
         }) {
             VStack(alignment: .leading, spacing: 8) {
-                AsyncImage(url: URL(string: attachment.imageUrl.hasPrefix("http") ? attachment.imageUrl : "https://lumaai-j0u3.onrender.com" + attachment.imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        ZStack {
-                            Color.lumaSurfaceElevated
-                            ProgressView()
-                        }
+                if attachment.imageUrl.hasPrefix("data:image"),
+                   let commaIdx = attachment.imageUrl.firstIndex(of: ","),
+                   let data = Data(base64Encoded: String(attachment.imageUrl[attachment.imageUrl.index(after: commaIdx)...])),
+                   let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
                         .frame(width: 260, height: 260)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 260, height: 260)
-                            .clipped()
-                    case .failure:
-                        ZStack {
-                            Color.lumaSurfaceElevated
-                            VStack(spacing: 8) {
-                                Image(systemName: "photo.badge.exclamationmark")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.lumaTertiaryText)
-                                Text("Could not load image")
-                                    .font(LumaTypography.caption)
-                                    .foregroundColor(.lumaSecondaryText)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                } else {
+                    AsyncImage(url: URL(string: attachment.imageUrl.hasPrefix("http") ? attachment.imageUrl : "https://lumaai-j0u3.onrender.com" + attachment.imageUrl)) { phase in
+                        switch phase {
+                        case .empty:
+                            ZStack {
+                                Color.lumaSurfaceElevated
+                                ProgressView()
                             }
+                            .frame(width: 260, height: 260)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 260, height: 260)
+                                .clipped()
+                        case .failure:
+                            ZStack {
+                                Color.lumaSurfaceElevated
+                                VStack(spacing: 8) {
+                                    Image(systemName: "photo.badge.exclamationmark")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.lumaTertiaryText)
+                                    Text("Could not load image")
+                                        .font(LumaTypography.caption)
+                                        .foregroundColor(.lumaSecondaryText)
+                                }
+                            }
+                            .frame(width: 260, height: 260)
+                        @unknown default:
+                            EmptyView()
                         }
-                        .frame(width: 260, height: 260)
-                    @unknown default:
-                        EmptyView()
                     }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 HStack {
                     Text(attachment.prompt)

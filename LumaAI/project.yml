@@ -33,6 +33,7 @@ targets:
         NSCameraUsageDescription: "Luma AI uses the camera to scan and recognize text in real time."
         NSMicrophoneUsageDescription: "Luma AI uses the microphone for voice conversations with the AI assistant."
         NSSpeechRecognitionUsageDescription: "Luma AI uses speech recognition to transcribe your spoken words in real time."
+        NSPhotoLibraryUsageDescription: "Luma AI allows you to attach photos to your messages and creative prompts."
         GIDClientID: "172474086048-ke3r4ekgdm0vcak48j1bvqqb6msrmubh.apps.googleusercontent.com"
         GIDServerClientID: "172474086048-02bpfth3nc9md882lhc22bkfl2raojpd.apps.googleusercontent.com"
         CFBundleURLTypes:

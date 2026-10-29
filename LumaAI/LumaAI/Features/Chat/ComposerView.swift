@@ -1,35 +1,49 @@
 import SwiftUI
+import PhotosUI
 
 public struct ComposerView: View {
     @Binding var text: String
+    @Binding var attachedImage: UIImage?
     let isStreaming: Bool
     let isImageMode: Bool
+    let isDictating: Bool
+    let speechAudioLevel: Float
     let onToggleImageMode: () -> Void
     let onScanText: () -> Void
-    let onStartVoice: () -> Void
+    let onToggleVoice: () -> Void
+    let onOpenVoiceMode: () -> Void
     let onSend: () -> Void
     let onStop: () -> Void
     var onFocusChange: ((Bool) -> Void)?
 
     @FocusState private var isFocused: Bool
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
 
     public init(
         text: Binding<String>,
+        attachedImage: Binding<UIImage?> = .constant(nil),
         isStreaming: Bool,
         isImageMode: Bool,
+        isDictating: Bool = false,
+        speechAudioLevel: Float = 0.0,
         onToggleImageMode: @escaping () -> Void,
         onScanText: @escaping () -> Void,
-        onStartVoice: @escaping () -> Void,
+        onToggleVoice: @escaping () -> Void,
+        onOpenVoiceMode: @escaping () -> Void,
         onSend: @escaping () -> Void,
         onStop: @escaping () -> Void,
         onFocusChange: ((Bool) -> Void)? = nil
     ) {
         self._text = text
+        self._attachedImage = attachedImage
         self.isStreaming = isStreaming
         self.isImageMode = isImageMode
+        self.isDictating = isDictating
+        self.speechAudioLevel = speechAudioLevel
         self.onToggleImageMode = onToggleImageMode
         self.onScanText = onScanText
-        self.onStartVoice = onStartVoice
+        self.onToggleVoice = onToggleVoice
+        self.onOpenVoiceMode = onOpenVoiceMode
         self.onSend = onSend
         self.onStop = onStop
         self.onFocusChange = onFocusChange
@@ -40,10 +54,10 @@ public struct ComposerView: View {
             // Mode Banner if image mode is active
             if isImageMode {
                 HStack(spacing: 6) {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 13))
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.lumaAccent)
-                    Text("Image Generation Mode active")
+                    Text("Image Generation Mode")
                         .font(LumaTypography.captionMedium)
                         .foregroundColor(.lumaAccent)
                     Spacer()
@@ -61,19 +75,81 @@ public struct ComposerView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            // Input Bar
-            HStack(alignment: .bottom, spacing: 8) {
-                // Image Mode Toggle Button
-                Button(action: {
-                    HapticFeedback.selection()
-                    onToggleImageMode()
-                }) {
-                    Image(systemName: isImageMode ? "photo.fill" : "photo")
-                        .font(.system(size: 17))
-                        .foregroundColor(isImageMode ? .lumaAccent : .lumaSecondaryText)
+            // Attached Photo Preview Strip
+            if let img = attachedImage {
+                HStack(spacing: 12) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.lumaBorder, lineWidth: 1)
+                            )
+
+                        Button(action: {
+                            withAnimation(.spring(response: 0.25)) {
+                                attachedImage = nil
+                                selectedPhotoItem = nil
+                            }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.lumaPrimaryText)
+                                .background(Circle().fill(Color.white))
+                        }
+                        .offset(x: 6, y: -6)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Photo Attached")
+                            .font(LumaTypography.captionMedium)
+                            .foregroundColor(.lumaPrimaryText)
+                        Text("Ready to send with your message")
+                            .font(LumaTypography.caption)
+                            .foregroundColor(.lumaSecondaryText)
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.lumaSurfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.horizontal, 16)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            // Main Input Capsule
+            HStack(alignment: .bottom, spacing: 6) {
+                // Photo Picker Button
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
                         .frame(width: 36, height: 36)
-                        .background(isImageMode ? Color.lumaAccentLight : Color.clear)
+                        .background(Color.black.opacity(0.04))
                         .clipShape(Circle())
+                }
+                .onChange(of: selectedPhotoItem) { newItem in
+                    guard let item = newItem else { return }
+                    Task {
+                        if let data = try? await item.loadTransferable(type: Data.self),
+                           let uiImage = UIImage(data: data) {
+                            await MainActor.run {
+                                withAnimation(.spring(response: 0.25)) {
+                                    self.attachedImage = uiImage
+                                }
+                            }
+                        }
+                    }
+                }
+                .contextMenu {
+                    Button(action: onToggleImageMode) {
+                        Label(isImageMode ? "Switch to Text Mode" : "Generate AI Image", systemImage: "sparkles")
+                    }
                 }
 
                 // Live Camera OCR Text Scanner Button
@@ -82,44 +158,71 @@ public struct ComposerView: View {
                     onScanText()
                 }) {
                     Image(systemName: "text.viewfinder")
-                        .font(.system(size: 17))
-                        .foregroundColor(.lumaSecondaryText)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
                         .frame(width: 36, height: 36)
-                        .background(Color.clear)
+                        .background(Color.black.opacity(0.04))
                         .clipShape(Circle())
                 }
 
-                // Voice Conversation Mode Button
+                // Voice Dictation / Recording Button
                 Button(action: {
                     HapticFeedback.light()
-                    onStartVoice()
+                    onToggleVoice()
                 }) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 17))
-                        .foregroundColor(.lumaSecondaryText)
-                        .frame(width: 36, height: 36)
-                        .background(Color.clear)
-                        .clipShape(Circle())
+                    ZStack {
+                        if isDictating {
+                            Circle()
+                                .fill(Color.lumaError.opacity(0.18))
+                                .frame(width: 36, height: 36)
+                                .scaleEffect(1.0 + CGFloat(speechAudioLevel) * 0.35)
+                                .animation(.easeInOut(duration: 0.12), value: speechAudioLevel)
+
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.lumaError)
+                        } else {
+                            Circle()
+                                .fill(Color.black.opacity(0.04))
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "mic")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                }
+                .contextMenu {
+                    Button(action: onOpenVoiceMode) {
+                        Label("Open Voice Conversation Mode", systemImage: "waveform")
+                    }
                 }
 
-                // Multiline Text Field
-                TextField(
-                    isImageMode ? "Describe the image to generate…" : "Message Luma AI…",
-                    text: $text,
-                    axis: .vertical
-                )
-                .font(LumaTypography.body)
-                .foregroundColor(.lumaPrimaryText)
-                .focused($isFocused)
-                .lineLimit(1...5)
-                .frame(minHeight: 38)
-                .padding(.vertical, 6)
-                .padding(.horizontal, 4)
-                .onChange(of: isFocused) { focused in
-                    onFocusChange?(focused)
+                // High-Contrast Input Field with Crisp Readable Placeholder
+                ZStack(alignment: .leading) {
+                    if text.isEmpty {
+                        Text(isImageMode ? "Describe the image to generate…" : "Message Luma AI…")
+                            .font(LumaTypography.body)
+                            .foregroundColor(Color(red: 120/255, green: 113/255, blue: 108/255)) // Warm gray #78716C (high contrast)
+                            .padding(.horizontal, 4)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: $text, axis: .vertical)
+                        .font(LumaTypography.body)
+                        .foregroundColor(.lumaPrimaryText)
+                        .focused($isFocused)
+                        .lineLimit(1...5)
+                        .frame(minHeight: 38)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .onChange(of: isFocused) { focused in
+                            onFocusChange?(focused)
+                        }
                 }
 
-                // Send / Stop Button
+                // Send / Stop Button with Distinct Enabled and Disabled States
                 if isStreaming {
                     Button(action: {
                         HapticFeedback.medium()
@@ -142,11 +245,11 @@ public struct ComposerView: View {
                     }) {
                         ZStack {
                             Circle()
-                                .fill(canSend ? Color.lumaPrimaryText : Color.lumaBorder)
+                                .fill(canSend ? Color.lumaPrimaryText : Color(red: 228/255, green: 226/255, blue: 224/255))
                                 .frame(width: 38, height: 38)
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(canSend ? .white : .lumaTertiaryText)
+                                .foregroundColor(canSend ? Color.white : Color(red: 140/255, green: 135/255, blue: 130/255))
                         }
                     }
                     .disabled(!canSend)
@@ -168,6 +271,6 @@ public struct ComposerView: View {
     }
 
     private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isStreaming
+        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachedImage != nil) && !isStreaming
     }
 }

@@ -50,6 +50,11 @@ public struct ChatView: View {
                 .onChange(of: viewModel.conversation.messages.last?.content) { _ in
                     scrollToBottom(proxy: proxy, animated: false)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        scrollToBottom(proxy: proxy)
+                    }
+                }
             }
 
             // Error Banner if present
@@ -76,8 +81,11 @@ public struct ChatView: View {
             // Bottom Composer
             ComposerView(
                 text: $viewModel.inputText,
+                attachedImage: $viewModel.attachedImage,
                 isStreaming: viewModel.isStreaming,
                 isImageMode: viewModel.isImageMode,
+                isDictating: viewModel.isDictating,
+                speechAudioLevel: viewModel.speechAudioLevel,
                 onToggleImageMode: {
                     withAnimation(.spring(response: 0.25)) {
                         viewModel.isImageMode.toggle()
@@ -87,7 +95,10 @@ public struct ChatView: View {
                     dismissKeyboard()
                     showingTextScanner = true
                 },
-                onStartVoice: onOpenVoice,
+                onToggleVoice: {
+                    viewModel.toggleDictation()
+                },
+                onOpenVoiceMode: onOpenVoice,
                 onSend: {
                     viewModel.sendMessage()
                 },

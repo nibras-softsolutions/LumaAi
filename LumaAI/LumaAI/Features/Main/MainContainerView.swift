@@ -3,6 +3,7 @@ import SwiftUI
 public struct MainContainerView: View {
     @EnvironmentObject var appEnv: AppEnvironment
     @State private var selectedTab: Int = 0
+    @State private var isKeyboardVisible: Bool = false
 
     public init() {}
 
@@ -21,6 +22,7 @@ public struct MainContainerView: View {
                     appEnv.showingSettings = true
                 }
             )
+            .toolbar(isKeyboardVisible ? .hidden : .visible, for: .tabBar)
             .tabItem {
                 Label("Chat", systemImage: "bubble.left.and.bubble.right")
             }
@@ -34,6 +36,17 @@ public struct MainContainerView: View {
                 .tag(1)
         }
         .tint(.lumaPrimaryText)
+        .toolbar(isKeyboardVisible ? .hidden : .visible, for: .tabBar)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isKeyboardVisible = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isKeyboardVisible = false
+            }
+        }
         .sheet(isPresented: $appEnv.showingHistory) {
             let userId = appEnv.authManager.currentUser?.id ?? "anonymous"
             HistoryView(

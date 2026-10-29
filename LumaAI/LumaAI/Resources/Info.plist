@@ -43,6 +43,8 @@
 	<string>Luma AI uses the microphone for voice conversations with the AI assistant.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Luma AI uses speech recognition to transcribe your spoken words in real time.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Luma AI allows you to attach photos to your messages and creative prompts.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>

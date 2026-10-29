@@ -53,6 +53,7 @@
 		CF607B3162E46BF1624D8E5A /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD5498F1432E973287FC636 /* CameraPreviewView.swift */; };
 		CFD67F885B01208C1EA026EB /* LiveCameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A686EF1A9FE9582F3C12830D /* LiveCameraService.swift */; };
 		D686CFA9B9590C5726E2229F /* LiveTextScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C175457C4B135F8262DC3246 /* LiveTextScannerView.swift */; };
+		DCC00E4C6215D08549F1E7FF /* ChatViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DA50AAC568FC11795CBDA77 /* ChatViewModelTests.swift */; };
 		DF529A92992F93CB4F49E1C6 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F089E1436E610BC968EB943 /* ChatMessage.swift */; };
 		E2831D07346472D0F27C7158 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C4535F7209E4AE6B3D017B /* ChatView.swift */; };
 		E546736E027EFAC293434436 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 678D65AD731428ACC9E9BE8B /* GoogleSignIn */; };
@@ -108,6 +109,7 @@
 		8E299E55BB77DCAB1FDB0D47 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		96E5AE78BAF20BB47F965EA4 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		9793FF88714E8DD050C82192 /* SSEParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParserTests.swift; sourceTree = "<group>"; };
+		9DA50AAC568FC11795CBDA77 /* ChatViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelTests.swift; sourceTree = "<group>"; };
 		9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainContainerView.swift; sourceTree = "<group>"; };
 		9EC4930FF2CEEE8A47F4F791 /* TextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechService.swift; sourceTree = "<group>"; };
 		A35B60D6924377CE8669D2E9 /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
@@ -336,6 +338,7 @@
 			isa = PBXGroup;
 			children = (
 				A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */,
+				9DA50AAC568FC11795CBDA77 /* ChatViewModelTests.swift */,
 				1557322300F55C521B669BC1 /* ConversationStoreTests.swift */,
 				6FB01928141F956B0643F685 /* LiveTextScannerTests.swift */,
 				6CC2D09471F21D4A493C83C8 /* ModelDecodingTests.swift */,
@@ -532,6 +535,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91F006EA2A4D56DB686130F2 /* APIEndpointTests.swift in Sources */,
+				DCC00E4C6215D08549F1E7FF /* ChatViewModelTests.swift in Sources */,
 				635059B333D2E889D72B385A /* ConversationStoreTests.swift in Sources */,
 				E95F81E76FC6FE322F6100F6 /* LiveTextScannerTests.swift in Sources */,
 				8B1355B56E6FEA506ED77F4D /* ModelDecodingTests.swift in Sources */,

@@ -10,11 +10,16 @@ public final class ChatViewModel: ObservableObject {
     @Published public var isImageMode: Bool = false
     @Published public var errorMessage: String?
     @Published public var selectedImageAttachment: ImageAttachment?
+    @Published public var attachedImage: UIImage? = nil
+    @Published public var isDictating: Bool = false
+    @Published public var speechAudioLevel: Float = 0.0
 
     private let apiClient: APIClientProtocol
     private let conversationStore: ConversationStoreProtocol
     private let userId: String
     private var streamingTask: Task<Void, Never>?
+    private let speechService = SpeechRecognitionService()
+    private var cancellables = Set<AnyCancellable>()
 
     public init(
         conversation: Conversation = Conversation(),
@@ -26,37 +31,124 @@ public final class ChatViewModel: ObservableObject {
         self.apiClient = apiClient
         self.conversationStore = conversationStore
         self.userId = userId
+
+        speechService.$audioLevel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] level in
+                self?.speechAudioLevel = level
+            }
+            .store(in: &cancellables)
+
+        speechService.$isRecording
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] recording in
+                if !recording && self?.isDictating == true {
+                    self?.isDictating = false
+                }
+            }
+            .store(in: &cancellables)
     }
 
     public func setConversation(_ newConv: Conversation) {
         stopStreaming()
+        stopDictation()
         self.conversation = newConv
         self.inputText = ""
+        self.attachedImage = nil
         self.errorMessage = nil
     }
 
     public func startNewConversation() {
         stopStreaming()
+        stopDictation()
         self.conversation = Conversation()
         self.inputText = ""
+        self.attachedImage = nil
         self.errorMessage = nil
     }
 
+    public func toggleDictation() {
+        if isDictating {
+            stopDictation()
+        } else {
+            startDictation()
+        }
+    }
+
+    public func startDictation() {
+        Task { @MainActor in
+            let granted = await speechService.requestPermissions()
+            guard granted else {
+                self.errorMessage = "Speech recognition and microphone access are required for voice input. Please enable them in iOS Settings."
+                return
+            }
+
+            self.isDictating = true
+            let initialText = self.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            do {
+                try speechService.startRecording { [weak self] transcript, isFinal in
+                    guard let self = self else { return }
+                    if initialText.isEmpty {
+                        self.inputText = transcript
+                    } else {
+                        self.inputText = "\(initialText) \(transcript)"
+                    }
+                    if isFinal {
+                        self.isDictating = false
+                    }
+                }
+            } catch {
+                self.isDictating = false
+                self.errorMessage = "Could not start voice input: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    public func stopDictation() {
+        speechService.stopRecording()
+        isDictating = false
+        speechAudioLevel = 0.0
+    }
+
     public func sendMessage() {
+        if isDictating {
+            stopDictation()
+        }
+
         let cleanText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanText.isEmpty, !isStreaming else { return }
+        guard (!cleanText.isEmpty || attachedImage != nil), !isStreaming else { return }
 
         // Clear input immediately
         inputText = ""
         errorMessage = nil
 
+        var attachment: ImageAttachment? = nil
+        if let img = attachedImage, let jpegData = img.jpegData(compressionQuality: 0.7) {
+            let base64 = jpegData.base64EncodedString()
+            attachment = ImageAttachment(
+                id: UUID().uuidString,
+                prompt: cleanText.isEmpty ? "Image upload" : cleanText,
+                aspectRatio: "1:1",
+                imageUrl: "data:image/jpeg;base64,\(base64)",
+                width: Int(img.size.width),
+                height: Int(img.size.height),
+                provider: "user_upload",
+                model: "user"
+            )
+        }
+        attachedImage = nil
+
+        let messageText = cleanText.isEmpty ? (attachment != nil ? "Attached an image." : "") : cleanText
+
         // Add user message
-        let userMessage = ChatMessage(role: .user, content: cleanText, status: .complete)
+        let userMessage = ChatMessage(role: .user, content: messageText, status: .complete, imageAttachment: attachment)
         conversation.messages.append(userMessage)
 
         // Generate title if first message
         if conversation.messages.filter({ $0.role == .user }).count == 1 {
-            let words = cleanText.split(separator: " ").prefix(5).joined(separator: " ")
+            let titleSource = cleanText.isEmpty ? "Image Conversation" : cleanText
+            let words = titleSource.split(separator: " ").prefix(5).joined(separator: " ")
             conversation.title = words.isEmpty ? "New Conversation" : words
         }
         conversation.updatedAt = Date()
