@@ -162,6 +162,33 @@ If you prefer direct client-side requests:
 
 ---
 
+## Vercel Speed Insights
+
+This project is configured with **Vercel Speed Insights** to monitor real-time performance metrics and Core Web Vitals.
+
+### Setup Requirements
+
+1. **Dashboard Configuration**: Enable Speed Insights in your Vercel project dashboard:
+   - Navigate to your project on [vercel.com](https://vercel.com)
+   - Go to **Settings** → **Speed Insights**
+   - Click **Enable Speed Insights**
+
+2. **Code Integration**: The Speed Insights tracking script is already integrated in `static/speed-insights.js` and loaded in the HTML files.
+
+3. **Viewing Metrics**: After deployment, access performance data:
+   - Go to your project dashboard
+   - Click the **Speed Insights** tab in the sidebar
+   - View Real Experience Score (RES) and Core Web Vitals
+
+### How It Works
+
+- The `speed-insights.js` script automatically injects the Vercel Speed Insights tracking code
+- Performance metrics are collected from real user visits
+- Data appears in your Vercel dashboard after deployment
+- In local development, the debug version provides console feedback
+
+---
+
 ## Google Sign-In (Cross-Platform)
 
 Luma AI supports seamless **Continue with Google** authentication across both the web and native iOS apps, sharing a unified user database and session security architecture.

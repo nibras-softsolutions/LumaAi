@@ -1,0 +1,16 @@
+{
+  "name": "luma-ai",
+  "version": "1.0.0",
+  "description": "Luma AI - A thoughtful space to chat, think, and create",
+  "private": true,
+  "scripts": {
+    "postinstall": "echo 'Dependencies installed successfully'"
+  },
+  "dependencies": {
+    "@vercel/speed-insights": "^1.1.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
