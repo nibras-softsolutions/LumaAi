@@ -16,4 +16,5 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 Confidential.txt
+node_modules/
 
