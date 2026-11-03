@@ -92,13 +92,14 @@ public struct MessageBubbleView: View {
 
     private var assistantAvatar: some View {
         Circle()
-            .fill(Color.lumaSurfaceElevated)
-            .frame(width: 32, height: 32)
+            .fill(Color.orbixPurple)
+            .frame(width: 30, height: 30)
             .overlay(
                 Image(systemName: "sparkle")
-                    .font(.system(size: 14, weight: .light))
-                    .foregroundColor(.lumaPrimaryText)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
             )
+            .shadow(color: Color.orbixPurple.opacity(0.25), radius: 4, x: 0, y: 2)
             .padding(.top, 2)
     }
 
@@ -110,18 +111,20 @@ public struct MessageBubbleView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.lumaPrimaryText)
+                    .background(Color.orbixBlackPill)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
             } else {
                 MarkdownView(message.content)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.lumaSurface)
+                    .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.lumaBorder, lineWidth: 1)
+                            .stroke(Color.orbixCardBorder, lineWidth: 1)
                     )
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 3)
             }
         }
         .contextMenu {

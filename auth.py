@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
+import io
 import os
+from pathlib import Path
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -11,6 +14,7 @@ from uuid import uuid4
 
 from dotenv import load_dotenv
 import httpx
+from PIL import Image, ImageOps
 
 load_dotenv()
 
@@ -113,6 +117,27 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    profile_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    custom_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bio: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    avatar_emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    avatar_color_hex: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class CustomCharacterModel(Base):
+    __tablename__ = "custom_characters"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    system_prompt: Mapped[str] = mapped_column(String(4000), nullable=False)
+    avatar_emoji: Mapped[str] = mapped_column(String(32), nullable=False, default="✨")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
 
@@ -210,6 +235,40 @@ class UserResponse(BaseModel):
     id: str
     full_name: str
     email: str
+    profile_image_url: str | None = None
+    custom_name: str | None = None
+    bio: str | None = None
+    avatar_emoji: str | None = None
+    avatar_color_hex: str | None = None
+
+
+class UpdateProfileRequest(BaseModel):
+    custom_name: str | None = None
+    bio: str | None = None
+    avatar_emoji: str | None = None
+    avatar_color_hex: str | None = None
+    profile_image_url: str | None = None
+
+
+class UploadPhotoPayload(BaseModel):
+    image: str
+
+
+class CustomCharacterSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    system_prompt: str
+    avatar_emoji: str = "✨"
+    created_at: datetime | None = None
+
+
+class CreateCustomCharacterPayload(BaseModel):
+    id: str | None = None
+    name: str = Field(min_length=1, max_length=100)
+    system_prompt: str = Field(min_length=1, max_length=4000)
+    avatar_emoji: str = Field(default="✨", max_length=32)
 
 
 def _utcnow() -> datetime:
@@ -260,6 +319,28 @@ def _set_session_cookie(response: Response, token: str) -> None:
 async def initialize_database() -> None:
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+
+        def _migrate(sync_conn):
+            from sqlalchemy import inspect, text
+            inspector = inspect(sync_conn)
+            table_names = inspector.get_table_names()
+            if "users" in table_names:
+                cols = {col["name"] for col in inspector.get_columns("users")}
+                to_add = [
+                    ("profile_image_url", "VARCHAR(512)"),
+                    ("custom_name", "VARCHAR(100)"),
+                    ("bio", "VARCHAR(250)"),
+                    ("avatar_emoji", "VARCHAR(32)"),
+                    ("avatar_color_hex", "VARCHAR(16)"),
+                    ("updated_at", "DATETIME"),
+                ]
+                for col_name, col_type in to_add:
+                    if col_name not in cols:
+                        try:
+                            sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                        except Exception:
+                            pass
+        await connection.run_sync(_migrate)
 
 
 async def require_user(request: Request) -> User:
@@ -440,6 +521,7 @@ async def google_login(
     user: User | None = None
     async with SessionFactory.begin() as db:
         user = await db.scalar(select(User).where(User.email == email))
+        picture = idinfo.get("picture")
         if user is None:
             # First-time Google user: create user record with dummy secure password hash
             dummy_password = await asyncio.to_thread(password_hasher.hash, secrets.token_urlsafe(32))
@@ -447,10 +529,14 @@ async def google_login(
                 full_name=full_name,
                 email=email,
                 password_hash=dummy_password,
+                profile_image_url=picture,
                 created_at=_utcnow(),
             )
             db.add(user)
             await db.flush()
+        else:
+            if not user.profile_image_url and picture:
+                user.profile_image_url = picture
         token = await _add_session(db, user.id)
 
     _set_session_cookie(response, token)
@@ -546,3 +632,214 @@ async def logout(request: Request) -> Response:
         path="/",
     )
     return response
+
+
+user_router = APIRouter(prefix="/api/user", tags=["user"])
+
+AVATARS_DIR = Path(__file__).resolve().parent / "static" / "avatars"
+AVATARS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.get("/profile", response_model=UserResponse)
+@user_router.get("/profile", response_model=UserResponse)
+async def get_user_profile(user: User = Depends(require_user)) -> User:
+    return user
+
+
+@router.put("/profile", response_model=UserResponse)
+@user_router.put("/profile", response_model=UserResponse)
+async def update_user_profile(
+    data: UpdateProfileRequest,
+    user: User = Depends(require_user),
+) -> User:
+    async with SessionFactory.begin() as db:
+        db_user = await db.get(User, user.id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if data.custom_name is not None:
+            db_user.custom_name = data.custom_name.strip() if data.custom_name.strip() else None
+        if data.bio is not None:
+            db_user.bio = data.bio.strip() if data.bio.strip() else None
+        if data.avatar_emoji is not None:
+            db_user.avatar_emoji = data.avatar_emoji.strip() if data.avatar_emoji.strip() else None
+        if data.avatar_color_hex is not None:
+            db_user.avatar_color_hex = data.avatar_color_hex.strip() if data.avatar_color_hex.strip() else None
+        if data.profile_image_url is not None:
+            db_user.profile_image_url = data.profile_image_url.strip() if data.profile_image_url.strip() else None
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        return db_user
+
+
+@router.post("/profile/photo", response_model=UserResponse)
+@user_router.post("/profile/photo", response_model=UserResponse)
+async def upload_profile_photo(
+    payload: UploadPhotoPayload,
+    user: User = Depends(require_user),
+) -> User:
+    raw_data = payload.image.strip()
+    if not raw_data:
+        raise HTTPException(status_code=400, detail="Image data is required.")
+
+    if "," in raw_data:
+        raw_data = raw_data.split(",", 1)[1]
+
+    try:
+        image_bytes = base64.b64decode(raw_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+
+    if len(image_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image file too large (max 5MB).")
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
+        img = img.convert("RGB")
+        w, h = img.size
+        min_dim = min(w, h)
+        left = (w - min_dim) // 2
+        top = (h - min_dim) // 2
+        img = img.crop((left, top, left + min_dim, top + min_dim))
+        img.thumbnail((512, 512), Image.Resampling.LANCZOS)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Unsupported or corrupted image file.") from exc
+
+    for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
+        try:
+            old_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    filename = f"avatar_{user.id}_{int(datetime.now(timezone.utc).timestamp())}_{secrets.token_hex(4)}.jpg"
+    dest_path = AVATARS_DIR / filename
+    try:
+        img.save(dest_path, format="JPEG", quality=88, optimize=True)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to save avatar image.")
+
+    profile_url = f"/static/avatars/{filename}"
+    async with SessionFactory.begin() as db:
+        db_user = await db.get(User, user.id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        db_user.profile_image_url = profile_url
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        return db_user
+
+
+@router.delete("/profile/photo", response_model=UserResponse)
+@user_router.delete("/profile/photo", response_model=UserResponse)
+async def delete_profile_photo(user: User = Depends(require_user)) -> User:
+    for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
+        try:
+            old_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    async with SessionFactory.begin() as db:
+        db_user = await db.get(User, user.id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        db_user.profile_image_url = None
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        return db_user
+
+
+@router.delete("/profile", response_model=UserResponse)
+@user_router.delete("/profile", response_model=UserResponse)
+async def reset_profile(user: User = Depends(require_user)) -> User:
+    for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
+        try:
+            old_file.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    async with SessionFactory.begin() as db:
+        db_user = await db.get(User, user.id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        db_user.custom_name = None
+        db_user.bio = None
+        db_user.avatar_emoji = None
+        db_user.avatar_color_hex = None
+        db_user.profile_image_url = None
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        return db_user
+
+
+@router.get("/characters", response_model=list[CustomCharacterSchema])
+@user_router.get("/characters", response_model=list[CustomCharacterSchema])
+async def list_custom_characters(user: User = Depends(require_user)) -> list[CustomCharacterModel]:
+    async with SessionFactory() as db:
+        result = await db.scalars(
+            select(CustomCharacterModel)
+            .where(CustomCharacterModel.user_id == user.id)
+            .order_by(CustomCharacterModel.created_at.desc())
+        )
+        return list(result.all())
+
+
+@router.post("/characters", response_model=CustomCharacterSchema, status_code=201)
+@user_router.post("/characters", response_model=CustomCharacterSchema, status_code=201)
+async def create_custom_character(
+    payload: CreateCustomCharacterPayload,
+    user: User = Depends(require_user),
+) -> CustomCharacterModel:
+    char_id = payload.id if payload.id else str(uuid4())
+    async with SessionFactory.begin() as db:
+        existing = await db.get(CustomCharacterModel, char_id)
+        if existing:
+            if existing.user_id != user.id:
+                raise HTTPException(status_code=403, detail="Character belongs to another user.")
+            existing.name = payload.name.strip()
+            existing.system_prompt = payload.system_prompt.strip()
+            existing.avatar_emoji = payload.avatar_emoji.strip() or "✨"
+            await db.flush()
+            return existing
+
+        new_char = CustomCharacterModel(
+            id=char_id,
+            user_id=user.id,
+            name=payload.name.strip(),
+            system_prompt=payload.system_prompt.strip(),
+            avatar_emoji=payload.avatar_emoji.strip() or "✨",
+            created_at=_utcnow(),
+        )
+        db.add(new_char)
+        await db.flush()
+        return new_char
+
+
+@router.put("/characters/{char_id}", response_model=CustomCharacterSchema)
+@user_router.put("/characters/{char_id}", response_model=CustomCharacterSchema)
+async def update_custom_character(
+    char_id: str,
+    payload: CreateCustomCharacterPayload,
+    user: User = Depends(require_user),
+) -> CustomCharacterModel:
+    async with SessionFactory.begin() as db:
+        char = await db.get(CustomCharacterModel, char_id)
+        if char is None or char.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Character not found.")
+        char.name = payload.name.strip()
+        char.system_prompt = payload.system_prompt.strip()
+        char.avatar_emoji = payload.avatar_emoji.strip() or "✨"
+        await db.flush()
+        return char
+
+
+@router.delete("/characters/{char_id}", status_code=204)
+@user_router.delete("/characters/{char_id}", status_code=204)
+async def delete_custom_character(
+    char_id: str,
+    user: User = Depends(require_user),
+) -> Response:
+    async with SessionFactory.begin() as db:
+        char = await db.get(CustomCharacterModel, char_id)
+        if char and char.user_id == user.id:
+            await db.delete(char)
+    return Response(status_code=204)

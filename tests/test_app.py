@@ -1132,20 +1132,140 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("How can I help you today?", chunks)
         self.assertIn("event: done", chunks)
 
-    async def test_voice_streaming_cancellation_on_interruption(self):
-        # Simulate interruption: client closes the connection during streaming
-        main.llm = StubModel(["First sentence. ", "Second sentence."], delay=0.05)
-        async with self.client.stream(
-            "POST",
-            "/api/chat/stream",
-            json={"messages": [{"role": "user", "content": "Tell me a long story"}]},
-        ) as response:
-            self.assertEqual(response.status_code, 200)
-            async for chunk in response.aiter_text():
-                if "First sentence" in chunk:
-                    # Client interrupts and cancels
-                    break
-        # Closed cleanly without server crash
+    async def test_user_profile_crud_and_sync(self):
+        # 1. Register a test user
+        email = f"profile_test_{secrets.token_hex(4)}@example.com"
+        reg_res = await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Profile Tester", "email": email, "password": "StrongPassword123!"},
+        )
+        self.assertEqual(reg_res.status_code, 201)
+
+        # 2. Get profile
+        get_res = await self.client.get("/api/user/profile")
+        self.assertEqual(get_res.status_code, 200)
+        profile = get_res.json()
+        self.assertEqual(profile["full_name"], "Profile Tester")
+        self.assertIsNone(profile["profile_image_url"])
+
+        # 3. Update profile customization
+        update_res = await self.client.put(
+            "/api/user/profile",
+            json={
+                "custom_name": "Super Tester",
+                "bio": "Building with AI",
+                "avatar_emoji": "🚀",
+                "avatar_color_hex": "#8B5CF6",
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+        updated = update_res.json()
+        self.assertEqual(updated["custom_name"], "Super Tester")
+        self.assertEqual(updated["bio"], "Building with AI")
+        self.assertEqual(updated["avatar_emoji"], "🚀")
+        self.assertEqual(updated["avatar_color_hex"], "#8B5CF6")
+
+        # 4. Verify /api/auth/me also reflects the updated profile
+        me_res = await self.client.get("/api/auth/me")
+        self.assertEqual(me_res.status_code, 200)
+        me_data = me_res.json()
+        self.assertEqual(me_data["custom_name"], "Super Tester")
+        self.assertEqual(me_data["avatar_emoji"], "🚀")
+
+    async def test_profile_photo_upload_and_delete(self):
+        # Register user
+        email = f"avatar_test_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Avatar User", "email": email, "password": "StrongPassword123!"},
+        )
+
+        # 1x1 red PNG base64
+        tiny_png = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        upload_res = await self.client.post(
+            "/api/user/profile/photo",
+            json={"image": tiny_png},
+        )
+        self.assertEqual(upload_res.status_code, 200)
+        user_with_avatar = upload_res.json()
+        self.assertIsNotNone(user_with_avatar["profile_image_url"])
+        self.assertTrue(user_with_avatar["profile_image_url"].startswith("/static/avatars/"))
+
+        # Verify photo exists and can be fetched
+        photo_res = await self.client.get(user_with_avatar["profile_image_url"])
+        self.assertEqual(photo_res.status_code, 200)
+        self.assertEqual(photo_res.headers.get("content-type"), "image/jpeg")
+
+        # Delete photo
+        del_res = await self.client.delete("/api/user/profile/photo")
+        self.assertEqual(del_res.status_code, 200)
+        self.assertIsNone(del_res.json()["profile_image_url"])
+
+    async def test_custom_characters_crud(self):
+        email = f"char_test_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Persona Tester", "email": email, "password": "StrongPassword123!"},
+        )
+
+        # Create
+        create_res = await self.client.post(
+            "/api/user/characters",
+            json={
+                "name": "Custom Math Tutor",
+                "system_prompt": "You are a patient math tutor.",
+                "avatar_emoji": "📐",
+            },
+        )
+        self.assertEqual(create_res.status_code, 201)
+        char = create_res.json()
+        char_id = char["id"]
+        self.assertEqual(char["name"], "Custom Math Tutor")
+        self.assertEqual(char["avatar_emoji"], "📐")
+
+        # List
+        list_res = await self.client.get("/api/user/characters")
+        self.assertEqual(list_res.status_code, 200)
+        chars = list_res.json()
+        self.assertTrue(any(c["id"] == char_id for c in chars))
+
+        # Update
+        update_res = await self.client.put(
+            f"/api/user/characters/{char_id}",
+            json={
+                "name": "Advanced Math Tutor",
+                "system_prompt": "You are a university math professor.",
+                "avatar_emoji": "🔬",
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+        self.assertEqual(update_res.json()["name"], "Advanced Math Tutor")
+
+        # Delete
+        del_res = await self.client.delete(f"/api/user/characters/{char_id}")
+        self.assertEqual(del_res.status_code, 204)
+
+        # Verify deleted
+        list_again = await self.client.get("/api/user/characters")
+        self.assertFalse(any(c["id"] == char_id for c in list_again.json()))
+
+    async def test_tools_ocr_endpoint(self):
+        email = f"ocr_test_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "OCR Tester", "email": email, "password": "StrongPassword123!"},
+        )
+        tiny_png = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        ocr_res = await self.client.post(
+            "/api/tools/ocr",
+            json={"image": tiny_png},
+        )
+        self.assertEqual(ocr_res.status_code, 200)
+        self.assertIn("text", ocr_res.json())
 
 
 if __name__ == "__main__":

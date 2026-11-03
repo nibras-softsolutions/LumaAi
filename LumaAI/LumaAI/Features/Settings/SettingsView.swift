@@ -4,7 +4,11 @@ public struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
     @ObservedObject private var userPreferences: UserPreferences
     @Environment(\.dismiss) private var dismiss
+
     @State private var showingLogoutAlert: Bool = false
+    @State private var showingEditProfileSheet: Bool = false
+    @State private var showingAddCharacterSheet: Bool = false
+    @State private var characterBeingEdited: CustomCharacter? = nil
 
     public init(
         authManager: AuthenticationManager,
@@ -25,16 +29,19 @@ public struct SettingsView: View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Section 1: Account
+                    // Section 1: Account & Profile Customization
                     accountSection
 
-                    // Section 2: AI Infrastructure
+                    // Section 2: Custom Characters & AI Personas
+                    customCharactersSection
+
+                    // Section 3: AI Infrastructure
                     aiInfrastructureSection
 
-                    // Section 3: Voice & Speech
+                    // Section 4: Voice & Speech
                     voiceAndSpeechSection
 
-                    // Section 4: App Preferences
+                    // Section 5: App Preferences
                     appPreferencesSection
                 }
                 .padding(.horizontal, 16)
@@ -44,6 +51,20 @@ public struct SettingsView: View {
             .background(Color.settingsBackground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 15, weight: .semibold))
+                            Text("Back")
+                                .font(.system(size: 16, weight: .regular))
+                        }
+                        .foregroundColor(.settingsPrimaryText)
+                    }
+                }
+
                 ToolbarItem(placement: .principal) {
                     Text("Settings")
                         .font(.system(size: 17, weight: .semibold))
@@ -56,16 +77,33 @@ public struct SettingsView: View {
                     }) {
                         Text("Done")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.settingsPrimaryText)
-                            .padding(.horizontal, 14)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
                             .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.06))
+                            .background(Color.black)
                             .clipShape(Capsule())
                     }
                 }
             }
             .task {
                 await viewModel.checkServerHealth()
+            }
+            .sheet(isPresented: $showingEditProfileSheet) {
+                EditProfileView(
+                    userPreferences: userPreferences,
+                    currentUser: viewModel.authManager.currentUser
+                )
+            }
+            .sheet(isPresented: $showingAddCharacterSheet) {
+                EditCharacterView(
+                    userPreferences: userPreferences
+                )
+            }
+            .sheet(item: $characterBeingEdited) { char in
+                EditCharacterView(
+                    userPreferences: userPreferences,
+                    characterToEdit: char
+                )
             }
             .confirmationDialog("Sign Out of Luma AI?", isPresented: $showingLogoutAlert, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) {
@@ -89,24 +127,42 @@ public struct SettingsView: View {
 
             settingsCard {
                 if let user = viewModel.authManager.currentUser {
+                    let displayName = userPreferences.customDisplayName ?? user.fullName
+
                     HStack(spacing: 14) {
-                        Circle()
-                            .fill(Color.lumaSurfaceElevated)
-                            .frame(width: 48, height: 48)
-                            .overlay(
-                                Text(user.fullName.prefix(1).uppercased().isEmpty ? user.email.prefix(1).uppercased() : user.fullName.prefix(1).uppercased())
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.settingsPrimaryText)
-                            )
+                        UserProfileAvatarView(
+                            userPreferences: userPreferences,
+                            currentUser: user,
+                            size: 50
+                        )
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(user.fullName)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.settingsPrimaryText)
+                            HStack(spacing: 6) {
+                                Text(displayName)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.settingsPrimaryText)
+
+                                if userPreferences.hasCustomProfile {
+                                    Text("Custom")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.lumaAccent)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.lumaAccentLight)
+                                        .clipShape(Capsule())
+                                }
+                            }
 
                             Text(user.email)
                                 .font(.system(size: 13))
                                 .foregroundColor(.settingsSecondaryText)
+
+                            if let bio = userPreferences.customBio, !bio.isEmpty {
+                                Text(bio)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.settingsSecondaryText.opacity(0.85))
+                                    .lineLimit(1)
+                            }
                         }
 
                         Spacer()
@@ -115,6 +171,49 @@ public struct SettingsView: View {
 
                     cardDivider
 
+                    // Edit Profile Action
+                    Button(action: {
+                        HapticFeedback.light()
+                        showingEditProfileSheet = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 15, weight: .medium))
+                            Text("Edit Profile Customization")
+                                .font(.system(size: 15, weight: .medium))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12))
+                                .foregroundColor(.settingsSecondaryText)
+                        }
+                        .foregroundColor(.settingsPrimaryText)
+                        .padding(16)
+                    }
+
+                    // Reset / Delete Customization if active
+                    if userPreferences.hasCustomProfile {
+                        cardDivider
+
+                        Button(action: {
+                            HapticFeedback.light()
+                            userPreferences.resetProfileCustomization()
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Delete Customization (Reset to Default)")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.settingsSecondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                        }
+                    }
+
+                    cardDivider
+
+                    // Sign Out Action
                     Button(action: {
                         showingLogoutAlert = true
                     }) {
@@ -130,7 +229,7 @@ public struct SettingsView: View {
                     }
                 } else {
                     HStack {
-                        Text("Not signed in")
+                        Text("Guest Account")
                             .font(.system(size: 14))
                             .foregroundColor(.settingsSecondaryText)
                         Spacer()
@@ -141,7 +240,126 @@ public struct SettingsView: View {
         }
     }
 
-    // MARK: - Section 2: AI Infrastructure
+    // MARK: - Section 2: Custom Characters & AI Personas
+
+    private var customCharactersSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                sectionHeader("Custom Characters")
+                Spacer()
+                Text("Select active persona")
+                    .font(.system(size: 11))
+                    .foregroundColor(.settingsSecondaryText)
+                    .padding(.trailing, 4)
+            }
+
+            settingsCard {
+                ForEach(userPreferences.allCharacters) { character in
+                    let isSelected = userPreferences.activeCharacterId == character.id
+
+                    VStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            // Avatar Icon
+                            Circle()
+                                .fill(Color(hex: character.accentColorHex).opacity(0.18))
+                                .frame(width: 44, height: 44)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color(hex: character.accentColorHex), lineWidth: isSelected ? 2 : 1)
+                                )
+                                .overlay(
+                                    Text(character.avatarEmoji)
+                                        .font(.system(size: 22))
+                                )
+
+                            // Info
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(character.name)
+                                        .font(.system(size: 15, weight: isSelected ? .bold : .medium))
+                                        .foregroundColor(.settingsPrimaryText)
+
+                                    if character.isBuiltIn {
+                                        Text("Built-in")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.settingsSecondaryText)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1.5)
+                                            .background(Color.black.opacity(0.05))
+                                            .clipShape(Capsule())
+                                    } else {
+                                        Text("Custom")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundColor(.lumaAccent)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1.5)
+                                            .background(Color.lumaAccentLight)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+
+                                Text(character.tagline)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.settingsSecondaryText)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            // Edit Button if user-created
+                            if !character.isBuiltIn {
+                                Button(action: {
+                                    HapticFeedback.light()
+                                    characterBeingEdited = character
+                                }) {
+                                    Image(systemName: "pencil.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.settingsSecondaryText)
+                                }
+                                .padding(.trailing, 4)
+                            }
+
+                            // Selection Checkmark
+                            if isSelected {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.lumaSuccess)
+                            }
+                        }
+                        .padding(14)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            HapticFeedback.selection()
+                            withAnimation(.spring(response: 0.25)) {
+                                userPreferences.activeCharacterId = character.id
+                            }
+                        }
+
+                        cardDivider
+                    }
+                }
+
+                // Add New Character Action
+                Button(action: {
+                    HapticFeedback.light()
+                    showingAddCharacterSheet = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.lumaAccent)
+                        Text("Create Custom Character")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.lumaAccent)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                }
+            }
+        }
+    }
+
+    // MARK: - Section 3: AI Infrastructure
 
     private var aiInfrastructureSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -247,7 +465,7 @@ public struct SettingsView: View {
         }
     }
 
-    // MARK: - Section 3: Voice & Speech
+    // MARK: - Section 4: Voice & Speech
 
     private var voiceAndSpeechSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -343,7 +561,7 @@ public struct SettingsView: View {
         }
     }
 
-    // MARK: - Section 4: App Preferences
+    // MARK: - Section 5: App Preferences
 
     private var appPreferencesSection: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -476,11 +694,11 @@ public struct SettingsView: View {
         case .loading:
             return .settingsSecondaryText
         case .operational:
-            return Color(red: 22/255, green: 163/255, blue: 74/255) // #16A34A Green
+            return Color(red: 22/255, green: 163/255, blue: 74/255)
         case .degraded:
-            return Color(red: 217/255, green: 119/255, blue: 6/255) // #D97706 Amber
+            return Color(red: 217/255, green: 119/255, blue: 6/255)
         case .unavailable:
-            return Color(red: 220/255, green: 38/255, blue: 38/255) // #DC2626 Red
+            return Color(red: 220/255, green: 38/255, blue: 38/255)
         }
     }
 

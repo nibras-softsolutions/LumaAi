@@ -56,6 +56,10 @@ public final class ChatViewModel: ObservableObject {
         self.inputText = ""
         self.attachedImage = nil
         self.errorMessage = nil
+
+        if let lastUserMsg = newConv.messages.last(where: { $0.role == .user }), !lastUserMsg.content.isEmpty {
+            LumaWidgetStore.shared.updateRecentPrompt(lastUserMsg.content)
+        }
     }
 
     public func startNewConversation() {
@@ -145,6 +149,10 @@ public final class ChatViewModel: ObservableObject {
         let userMessage = ChatMessage(role: .user, content: messageText, status: .complete, imageAttachment: attachment)
         conversation.messages.append(userMessage)
 
+        if !cleanText.isEmpty {
+            LumaWidgetStore.shared.updateRecentPrompt(cleanText)
+        }
+
         // Generate title if first message
         if conversation.messages.filter({ $0.role == .user }).count == 1 {
             let titleSource = cleanText.isEmpty ? "Image Conversation" : cleanText
@@ -175,9 +183,23 @@ public final class ChatViewModel: ObservableObject {
                 print("[LumaAI] ChatViewModel: ensureSession failed: \(error.localizedDescription)")
             }
 
+            // Get completed conversation history (excluding the in-progress assistant placeholder)
+            let history = conversation.messages.filter { $0.id != assistantMessageId && $0.status == .complete && ($0.role == .user || $0.role == .assistant) }
+            let activeChar = UserPreferences.shared.activeCharacter
+
+            var messagesToSend: [ChatMessage] = []
+            for (index, msg) in history.enumerated() {
+                var m = msg
+                // If a custom character persona is active, attach its context to the latest user message
+                if index == history.count - 1 && m.role == .user && activeChar.id != "char_luma_default" && !activeChar.systemPrompt.isEmpty {
+                    m.content = "[Context: \(activeChar.systemPrompt)]\n\n\(m.content)"
+                }
+                messagesToSend.append(m)
+            }
+
             var tokenCount = 0
             do {
-                let stream = apiClient.streamChat(messages: conversation.messages)
+                let stream = apiClient.streamChat(messages: messagesToSend)
                 for try await event in stream {
                     guard !Task.isCancelled else { break }
 

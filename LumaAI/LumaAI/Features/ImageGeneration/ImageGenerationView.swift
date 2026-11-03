@@ -3,15 +3,17 @@ import SwiftUI
 public struct ImageGenerationView: View {
     @StateObject private var viewModel: ImageGenerationViewModel
     @State private var selectedAttachmentForViewer: ImageAttachment?
+    let onOpenSidebar: (() -> Void)?
 
-    public init(apiClient: APIClientProtocol) {
+    public init(apiClient: APIClientProtocol, onOpenSidebar: (() -> Void)? = nil) {
         _viewModel = StateObject(wrappedValue: ImageGenerationViewModel(apiClient: apiClient))
+        self.onOpenSidebar = onOpenSidebar
     }
 
     public var body: some View {
         NavigationStack {
             ZStack {
-                Color.lumaCanvas
+                OrbixBackgroundView()
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -33,7 +35,7 @@ public struct ImageGenerationView: View {
                         // Generation Result or Placeholder
                         resultSection
 
-                        Spacer(minLength: 40)
+                        Spacer(minLength: 24)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
@@ -41,6 +43,20 @@ public struct ImageGenerationView: View {
             }
             .navigationTitle("Imagine")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let onOpenSidebar = onOpenSidebar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: {
+                            HapticFeedback.light()
+                            onOpenSidebar()
+                        }) {
+                            Image(systemName: "sidebar.left")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(Color.orbixPrimaryText)
+                        }
+                    }
+                }
+            }
             .sheet(item: $selectedAttachmentForViewer) { attachment in
                 ImageViewerView(attachment: attachment)
             }
@@ -119,18 +135,32 @@ public struct ImageGenerationView: View {
 
     private var generateButton: some View {
         let isPromptEmpty = viewModel.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return LumaButton(
-            viewModel.isGenerating ? "Synthesizing…" : "Generate Artwork",
-            style: .primary,
-            isLoading: viewModel.isGenerating
-        ) {
+        return Button(action: {
             HapticFeedback.medium()
             Task {
                 await viewModel.generate()
             }
+        }) {
+            HStack(spacing: 8) {
+                if viewModel.isGenerating {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Generate Artwork")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 54)
+            .background(Color.orbixBlackPill)
+            .foregroundColor(.white)
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 5)
         }
+        .buttonStyle(PillPressStyle())
         .disabled(isPromptEmpty || viewModel.isGenerating)
-        .opacity(isPromptEmpty ? 0.5 : 1.0)
+        .opacity(isPromptEmpty ? 0.45 : 1.0)
     }
 
     private func errorMessageView(_ message: String) -> some View {

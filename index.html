@@ -256,6 +256,10 @@
             <button class="composer-tool-btn" id="imageModeToggle" type="button" aria-label="Generate Image" title="Generate an image (Toggle Image Mode)">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <button class="composer-tool-btn" id="ocrScanButton" type="button" aria-label="Scan Document / Image OCR" title="Scan document or extract text from image">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="1.6"/></svg>
+            </button>
+            <input type="file" id="ocrFileInput" accept="image/*" capture="environment" hidden>
             <button class="composer-tool-btn" id="voiceModeButton" type="button" aria-label="Start Voice Conversation" title="Start voice conversation">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" stroke="currentColor" stroke-width="1.7"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -332,23 +336,154 @@
 
     <dialog class="settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
       <div class="dialog-header">
-        <div><p class="eyebrow">Luma AI</p><h2 id="settingsTitle">Settings &amp; model</h2></div>
+        <div><p class="eyebrow">Luma AI</p><h2 id="settingsTitle">Settings &amp; Preferences</h2></div>
         <button class="icon-button" id="closeSettings" type="button" aria-label="Close settings">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
       </div>
+
+      <!-- Account Profile Card -->
+      <div class="settings-account-card" id="settingsAccountCard">
+        <div class="settings-account-header">
+          <div class="settings-avatar-wrapper" id="settingsAvatarWrap">
+            <span class="profile-avatar large" id="settingsProfileAvatar">U</span>
+          </div>
+          <div class="settings-account-info">
+            <div class="settings-name-row">
+              <strong id="settingsAccountName">User</strong>
+              <span class="settings-custom-badge" id="settingsCustomBadge" hidden>Custom</span>
+            </div>
+            <p class="settings-account-email" id="settingsAccountEmail">user@example.com</p>
+            <p class="settings-account-bio" id="settingsAccountBio">Thinking and creating with Luma AI</p>
+          </div>
+        </div>
+        <div class="settings-account-actions">
+          <button class="settings-btn-primary" id="openEditProfileBtn" type="button">Edit Profile Customization</button>
+          <button class="settings-btn-danger" id="resetProfileCustomizationBtn" type="button" hidden>Delete Customization (Reset)</button>
+        </div>
+      </div>
+
+      <!-- Custom Personas / Characters -->
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <div>
+            <h3>Custom Characters</h3>
+            <p>Select active persona for your conversations</p>
+          </div>
+          <button class="settings-btn-secondary" id="openCreateCharBtn" type="button">+ New</button>
+        </div>
+        <div class="characters-list" id="charactersList">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- AI Model Card -->
       <div class="settings-model-card">
         <span class="model-avatar large" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8 4.5h8A3.5 3.5 0 0 1 19.5 8v8a3.5 3.5 0 0 1-3.5 3.5H8A3.5 3.5 0 0 1 4.5 16V8A3.5 3.5 0 0 1 8 4.5Z" stroke="currentColor" stroke-width="1.5"/><path d="M9 9h6v6H9zM8 2v2.5M16 2v2.5M8 19.5V22M16 19.5V22M2 8h2.5M19.5 8H22M2 16h2.5M19.5 16H22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
         <div><strong id="settingsModelName">llama3.2</strong><p>AI model</p></div>
         <span class="status-dot checking" id="settingsStatusDot" aria-hidden="true"></span>
       </div>
+
       <div class="privacy-notice">
         <strong>Conversation privacy</strong>
         <p>Chat history is saved in this browser’s local storage. It is not encrypted and is not suitable for secrets.</p>
       </div>
       <button class="clear-history-button" id="clearHistoryButton" type="button">Clear all conversations</button>
       <button class="logout-button" id="logoutButton" type="button">Log out</button>
-      <p class="settings-version">Luma AI · Chat history stored in this browser</p>
+      <p class="settings-version">Luma AI · Synchronized across all your devices</p>
+    </dialog>
+
+    <!-- Edit Profile Modal Dialog -->
+    <dialog class="modal-dialog" id="editProfileModal" aria-labelledby="editProfileTitle">
+      <div class="dialog-header">
+        <div><p class="eyebrow">CUSTOMIZATION</p><h2 id="editProfileTitle">Edit Profile</h2></div>
+        <button class="icon-button" id="closeEditProfile" type="button" aria-label="Close edit profile">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <form id="editProfileForm" novalidate>
+        <div class="avatar-editor-section">
+          <div class="avatar-preview-container">
+            <div class="avatar-preview-circle" id="avatarPreviewCircle">
+              <span id="avatarPreviewContent">👤</span>
+            </div>
+          </div>
+          <div class="avatar-upload-buttons">
+            <button class="settings-btn-primary" id="uploadPhotoTriggerBtn" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="15" height="15"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="1.6"/></svg>
+              <span>Upload Photo</span>
+            </button>
+            <input type="file" id="profilePhotoFileInput" accept="image/jpeg,image/png,image/webp" hidden>
+            <button class="settings-btn-danger" id="removePhotoBtn" type="button" hidden>Remove Photo</button>
+          </div>
+          <p class="field-hint">Upload a custom profile photo (synced to all devices) or select an avatar character below.</p>
+        </div>
+
+        <div class="palette-section">
+          <label class="palette-label">CHOOSE AVATAR CHARACTER</label>
+          <div class="emoji-palette" id="emojiPalette"></div>
+        </div>
+
+        <div class="palette-section">
+          <label class="palette-label">AVATAR ACCENT COLOR</label>
+          <div class="color-palette" id="colorPalette"></div>
+        </div>
+
+        <div class="modal-form-group">
+          <label for="editDisplayName">Display Name</label>
+          <input id="editDisplayName" type="text" maxlength="100" placeholder="Your name">
+        </div>
+
+        <div class="modal-form-group">
+          <label for="editBio">Bio / Status</label>
+          <input id="editBio" type="text" maxlength="250" placeholder="A short bio or headline">
+        </div>
+
+        <p class="auth-form-message" id="editProfileMessage" role="alert" aria-live="assertive" hidden></p>
+
+        <div class="modal-footer-actions">
+          <button class="secondary-button" id="cancelEditProfileBtn" type="button">Cancel</button>
+          <button class="primary-button" id="saveProfileBtn" type="submit">Save Changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Custom Character Dialog -->
+    <dialog class="modal-dialog" id="customCharModal" aria-labelledby="customCharTitle">
+      <div class="dialog-header">
+        <div><p class="eyebrow">AI PERSONA</p><h2 id="customCharTitle">Create Custom Character</h2></div>
+        <button class="icon-button" id="closeCustomChar" type="button" aria-label="Close character editor">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <form id="customCharForm" novalidate>
+        <div class="avatar-editor-section">
+          <div class="avatar-preview-circle character-circle-preview" id="charPreviewCircle">
+            <span id="charPreviewEmoji">✨</span>
+          </div>
+          <div class="emoji-palette" id="charEmojiPalette"></div>
+        </div>
+
+        <div class="modal-form-group">
+          <label for="charNameInput">Character Name</label>
+          <input id="charNameInput" type="text" maxlength="100" placeholder="e.g. Science Tutor, Marketing Expert" required>
+        </div>
+
+        <div class="modal-form-group">
+          <label for="charPromptInput">System Instructions / Personality</label>
+          <textarea id="charPromptInput" rows="4" maxlength="4000" placeholder="Describe how this persona should respond, its expertise, tone, and formatting rules..." required></textarea>
+        </div>
+
+        <p class="auth-form-message" id="customCharMessage" role="alert" aria-live="assertive" hidden></p>
+
+        <div class="modal-footer-actions">
+          <button class="settings-btn-danger" id="deleteCharBtn" type="button" hidden>Delete</button>
+          <button class="secondary-button" id="cancelCharBtn" type="button">Cancel</button>
+          <button class="primary-button" id="saveCharBtn" type="submit">Save Character</button>
+        </div>
+      </form>
     </dialog>
   </body>
 </html>

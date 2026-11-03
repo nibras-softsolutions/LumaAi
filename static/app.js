@@ -408,13 +408,17 @@ function createMessage(message, conversationId) {
   const avatar = document.createElement("span");
   avatar.className = "message-avatar";
   avatar.setAttribute("aria-hidden", "true");
-  avatar.textContent = message.role === "user" ? "Y" : "✳";
+  if (message.role === "user") {
+    applyUserAvatar(avatar);
+  } else {
+    avatar.textContent = getActivePersonaEmoji();
+  }
   const main = document.createElement("div");
   main.className = "message-main";
   const heading = document.createElement("div");
   heading.className = "message-heading";
   const name = document.createElement("strong");
-  name.textContent = message.role === "user" ? "You" : "Luma AI";
+  name.textContent = message.role === "user" ? getUserDisplayName() : getActivePersonaName();
   heading.append(name);
   const time = document.createElement("time");
   time.className = "message-time";
@@ -989,6 +993,10 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
       messages.unshift(message);
       historyLength += message.content.length;
     }
+    const activePersona = getActivePersona();
+    if (activePersona && activePersona.system_prompt) {
+      messages.unshift({ role: "system", content: activePersona.system_prompt });
+    }
     const response = await apiFetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -1370,8 +1378,10 @@ function showChat(user, pushHistory = false) {
   conversations = loadConversations();
   currentConversation =
     findConversation(readStorage(accountStorageKey(CURRENT_CHAT_KEY))) ?? makeConversation();
+  updateUserProfileUI();
+  loadCustomCharacters();
   const profileEl = document.querySelector("#profileName");
-  if (profileEl) profileEl.textContent = user.full_name || "User";
+  if (profileEl) profileEl.textContent = getUserDisplayName();
   shell.hidden = false;
   onboardingView.hidden = true;
   authView.hidden = true;
@@ -1678,6 +1688,8 @@ function closeHistoryMenu() {
 
 function openSettings() {
   closeMenus();
+  updateUserProfileUI();
+  loadCustomCharacters();
   settingsDialog.showModal();
 }
 
@@ -3082,6 +3094,585 @@ if (document.readyState === "loading") {
   initGoogleSignIn();
   window.setTimeout(initGoogleSignIn, 500);
   window.setTimeout(initGoogleSignIn, 1500);
+}
+
+/* ==========================================================================
+   User Profile, Avatars, Custom Characters & OCR Tooling
+   ========================================================================== */
+
+const AVATAR_EMOJIS = ["👤", "🧑‍💻", "⚡️", "🌟", "🚀", "🦊", "🦁", "💎", "🦉", "🎨", "💡", "☕️"];
+const COLOR_OPTIONS = [
+  { name: "Gold", hex: "#FFC43D" },
+  { name: "Blue", hex: "#2563EB" },
+  { name: "Purple", hex: "#8B5CF6" },
+  { name: "Emerald", hex: "#10B981" },
+  { name: "Rose", hex: "#EC4899" },
+  { name: "Dark", hex: "#1C1917" }
+];
+
+const BUILT_IN_PERSONAS = [
+  {
+    id: "char_luma_default",
+    name: "Luma AI",
+    avatar_emoji: "✨",
+    subtitle: "Thoughtful & articulate AI companion",
+    system_prompt: "You are Luma AI, a thoughtful, warm, and articulate AI companion. Provide clear, direct, and insightful answers with refined formatting."
+  },
+  {
+    id: "char_code_architect",
+    name: "Code Architect",
+    avatar_emoji: "👨‍💻",
+    subtitle: "Senior engineer for clean code & systems",
+    system_prompt: "You are Code Architect, a senior software engineer and systems architect. Write idiomatic, clean, modern, and production-ready code with minimal unnecessary explanations."
+  },
+  {
+    id: "char_creative_writer",
+    name: "Creative Writer",
+    avatar_emoji: "🎨",
+    subtitle: "Novelist, poet, and visual storyteller",
+    system_prompt: "You are Creative Writer, a master storyteller, novelist, and poet. Craft vivid, evocative descriptions, rich narratives, and engaging prose."
+  },
+  {
+    id: "char_philosopher",
+    name: "Philosopher",
+    avatar_emoji: "🦉",
+    subtitle: "First-principles inquiry & deep contemplation",
+    system_prompt: "You are Philosopher, a deep thinker trained in dialectics, epistemology, and ethics. Analyze problems from first principles and question assumptions."
+  },
+  {
+    id: "char_executive",
+    name: "Executive",
+    avatar_emoji: "⚡️",
+    subtitle: "Action-oriented bullet points & key takeaways",
+    system_prompt: "You are Executive, a concise chief executive. Cut to the chase with high-impact executive summaries, bullet points, and actionable next steps."
+  }
+];
+
+let userCustomCharacters = [];
+let activePersonaId = localStorage.getItem("luma_active_persona_id") || "char_luma_default";
+
+function getActivePersona() {
+  const builtIn = BUILT_IN_PERSONAS.find((p) => p.id === activePersonaId);
+  if (builtIn) return builtIn;
+  const custom = userCustomCharacters.find((p) => p.id === activePersonaId);
+  if (custom) return custom;
+  return BUILT_IN_PERSONAS[0];
+}
+
+function getActivePersonaEmoji() {
+  return getActivePersona()?.avatar_emoji || "✨";
+}
+
+function getActivePersonaName() {
+  return getActivePersona()?.name || "Luma AI";
+}
+
+function getUserDisplayName() {
+  return authenticatedUser?.custom_name || authenticatedUser?.full_name || "User";
+}
+
+function applyUserAvatar(element) {
+  if (!element) return;
+  if (authenticatedUser?.profile_image_url) {
+    element.classList.add("has-photo");
+    const cacheBuster = authenticatedUser.updated_at ? `?v=${authenticatedUser.updated_at}` : "";
+    element.style.backgroundImage = `url("${authenticatedUser.profile_image_url}${cacheBuster}")`;
+    element.style.backgroundColor = "";
+    element.textContent = "";
+  } else if (authenticatedUser?.avatar_emoji) {
+    element.classList.remove("has-photo");
+    element.style.backgroundImage = "";
+    element.style.backgroundColor = authenticatedUser.avatar_color_hex || "#FFC43D";
+    element.textContent = authenticatedUser.avatar_emoji;
+  } else {
+    element.classList.remove("has-photo");
+    element.style.backgroundImage = "";
+    element.style.backgroundColor = "";
+    const name = getUserDisplayName();
+    element.textContent = name ? name[0].toUpperCase() : "U";
+  }
+}
+
+function updateUserProfileUI() {
+  if (!authenticatedUser) return;
+  const displayName = getUserDisplayName();
+
+  const profileNameEl = document.querySelector("#profileName");
+  if (profileNameEl) profileNameEl.textContent = displayName;
+
+  const sidebarAvatar = document.querySelector("#settingsButton .profile-avatar");
+  if (sidebarAvatar) applyUserAvatar(sidebarAvatar);
+
+  const settingsAvatar = document.querySelector("#settingsProfileAvatar");
+  if (settingsAvatar) applyUserAvatar(settingsAvatar);
+
+  const accName = document.querySelector("#settingsAccountName");
+  if (accName) accName.textContent = displayName;
+
+  const accEmail = document.querySelector("#settingsAccountEmail");
+  if (accEmail) accEmail.textContent = authenticatedUser.email || "";
+
+  const accBio = document.querySelector("#settingsAccountBio");
+  if (accBio) accBio.textContent = authenticatedUser.bio || "Thinking and creating with Luma AI";
+
+  const hasCustom = Boolean(
+    authenticatedUser.custom_name ||
+    authenticatedUser.bio ||
+    authenticatedUser.avatar_emoji ||
+    authenticatedUser.profile_image_url
+  );
+
+  const badge = document.querySelector("#settingsCustomBadge");
+  if (badge) badge.hidden = !hasCustom;
+
+  const resetBtn = document.querySelector("#resetProfileCustomizationBtn");
+  if (resetBtn) resetBtn.hidden = !hasCustom;
+}
+
+async function loadCustomCharacters() {
+  try {
+    const res = await apiFetch("/api/user/characters");
+    if (res.ok) {
+      userCustomCharacters = await res.json();
+      renderCustomCharacters();
+    }
+  } catch (err) {
+    console.error("Failed to load custom characters", err);
+  }
+}
+
+function renderCustomCharacters() {
+  const container = document.querySelector("#charactersList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const all = [...BUILT_IN_PERSONAS, ...userCustomCharacters];
+  all.forEach((persona) => {
+    const isBuiltIn = Boolean(persona.subtitle);
+    const card = document.createElement("div");
+    card.className = `character-card ${persona.id === activePersonaId ? "active" : ""}`;
+    card.dataset.personaId = persona.id;
+
+    const left = document.createElement("div");
+    left.className = "character-card-left";
+
+    const badge = document.createElement("span");
+    badge.className = "character-emoji-badge";
+    badge.textContent = persona.avatar_emoji || "✨";
+
+    const details = document.createElement("div");
+    details.className = "character-details";
+
+    const strong = document.createElement("strong");
+    strong.textContent = persona.name;
+    const sub = document.createElement("span");
+    sub.textContent = persona.subtitle || (persona.system_prompt?.slice(0, 48) + "…");
+
+    details.append(strong, sub);
+    left.append(badge, details);
+    card.append(left);
+
+    if (persona.id === activePersonaId) {
+      const check = document.createElement("span");
+      check.className = "character-card-check";
+      check.innerHTML = `<svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      card.append(check);
+    } else if (!isBuiltIn) {
+      const editBtn = document.createElement("button");
+      editBtn.className = "settings-btn-secondary";
+      editBtn.style.padding = "3px 8px";
+      editBtn.style.fontSize = "10px";
+      editBtn.textContent = "Edit";
+      editBtn.onclick = (e) => {
+        e.stopPropagation();
+        openCustomCharacterDialog(persona);
+      };
+      card.append(editBtn);
+    }
+
+    card.addEventListener("click", () => {
+      activePersonaId = persona.id;
+      localStorage.setItem("luma_active_persona_id", persona.id);
+      renderCustomCharacters();
+      renderConversation();
+      showToast(`Active persona: ${persona.name}`);
+    });
+
+    container.append(card);
+  });
+}
+
+// Edit Profile Modal
+const editProfileModal = document.querySelector("#editProfileModal");
+const editProfileForm = document.querySelector("#editProfileForm");
+const openEditProfileBtn = document.querySelector("#openEditProfileBtn");
+const closeEditProfile = document.querySelector("#closeEditProfile");
+const cancelEditProfileBtn = document.querySelector("#cancelEditProfileBtn");
+const uploadPhotoTriggerBtn = document.querySelector("#uploadPhotoTriggerBtn");
+const profilePhotoFileInput = document.querySelector("#profilePhotoFileInput");
+const removePhotoBtn = document.querySelector("#removePhotoBtn");
+const resetProfileCustomizationBtn = document.querySelector("#resetProfileCustomizationBtn");
+
+let tempProfileEmoji = "👤";
+let tempProfileColor = "#FFC43D";
+
+function updateModalAvatarPreview() {
+  const circle = document.querySelector("#avatarPreviewCircle");
+  const content = document.querySelector("#avatarPreviewContent");
+  if (!circle || !content) return;
+
+  if (authenticatedUser?.profile_image_url) {
+    circle.classList.add("has-photo");
+    circle.style.backgroundImage = `url("${authenticatedUser.profile_image_url}")`;
+    circle.style.backgroundColor = "";
+    content.textContent = "";
+    if (removePhotoBtn) removePhotoBtn.hidden = false;
+  } else {
+    circle.classList.remove("has-photo");
+    circle.style.backgroundImage = "";
+    circle.style.backgroundColor = tempProfileColor;
+    content.textContent = tempProfileEmoji;
+    if (removePhotoBtn) removePhotoBtn.hidden = true;
+  }
+}
+
+function openEditProfileDialog() {
+  if (!authenticatedUser) return;
+  tempProfileEmoji = authenticatedUser.avatar_emoji || "👤";
+  tempProfileColor = authenticatedUser.avatar_color_hex || "#FFC43D";
+
+  const nameInput = document.querySelector("#editDisplayName");
+  if (nameInput) {
+    nameInput.value = authenticatedUser.custom_name || authenticatedUser.full_name || "";
+  }
+  const bioInput = document.querySelector("#editBio");
+  if (bioInput) {
+    bioInput.value = authenticatedUser.bio || "Thinking and creating with Luma AI";
+  }
+
+  const emojiPalette = document.querySelector("#emojiPalette");
+  if (emojiPalette) {
+    emojiPalette.innerHTML = "";
+    AVATAR_EMOJIS.forEach((emoji) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `emoji-choice-btn ${tempProfileEmoji === emoji ? "selected" : ""}`;
+      btn.textContent = emoji;
+      btn.onclick = () => {
+        tempProfileEmoji = emoji;
+        emojiPalette.querySelectorAll(".emoji-choice-btn").forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        updateModalAvatarPreview();
+      };
+      emojiPalette.append(btn);
+    });
+  }
+
+  const colorPalette = document.querySelector("#colorPalette");
+  if (colorPalette) {
+    colorPalette.innerHTML = "";
+    COLOR_OPTIONS.forEach((c) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `color-choice-btn ${tempProfileColor === c.hex ? "selected" : ""}`;
+      btn.style.backgroundColor = c.hex;
+      btn.title = c.name;
+      btn.onclick = () => {
+        tempProfileColor = c.hex;
+        colorPalette.querySelectorAll(".color-choice-btn").forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        updateModalAvatarPreview();
+      };
+      colorPalette.append(btn);
+    });
+  }
+
+  updateModalAvatarPreview();
+  const msgEl = document.querySelector("#editProfileMessage");
+  if (msgEl) msgEl.hidden = true;
+
+  if (settingsDialog.open) settingsDialog.close();
+  editProfileModal.showModal();
+}
+
+if (openEditProfileBtn) {
+  openEditProfileBtn.addEventListener("click", openEditProfileDialog);
+}
+if (closeEditProfile) {
+  closeEditProfile.addEventListener("click", () => editProfileModal.close());
+}
+if (cancelEditProfileBtn) {
+  cancelEditProfileBtn.addEventListener("click", () => editProfileModal.close());
+}
+
+if (uploadPhotoTriggerBtn && profilePhotoFileInput) {
+  uploadPhotoTriggerBtn.addEventListener("click", () => profilePhotoFileInput.click());
+  profilePhotoFileInput.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    profilePhotoFileInput.value = "";
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Profile image must be 5MB or smaller.");
+      return;
+    }
+    showToast("Uploading profile photo…");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64Data = reader.result;
+        const res = await apiFetch("/api/user/profile/photo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64Data }),
+        });
+        if (!res.ok) throw new Error("Failed to upload profile picture.");
+        authenticatedUser = await res.json();
+        updateUserProfileUI();
+        updateModalAvatarPreview();
+        renderConversation();
+        showToast("Profile photo synced across all devices.");
+      } catch (err) {
+        showToast("Photo upload failed: " + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+if (removePhotoBtn) {
+  removePhotoBtn.addEventListener("click", async () => {
+    try {
+      showToast("Removing profile photo…");
+      const res = await apiFetch("/api/user/profile/photo", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove profile photo.");
+      authenticatedUser = await res.json();
+      updateUserProfileUI();
+      updateModalAvatarPreview();
+      renderConversation();
+      showToast("Profile photo removed.");
+    } catch (err) {
+      showToast("Failed to remove photo: " + err.message);
+    }
+  });
+}
+
+if (editProfileForm) {
+  editProfileForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const saveBtn = document.querySelector("#saveProfileBtn");
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const cleanName = document.querySelector("#editDisplayName").value.trim();
+      const cleanBio = document.querySelector("#editBio").value.trim();
+      const res = await apiFetch("/api/user/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          custom_name: cleanName || null,
+          bio: cleanBio || null,
+          avatar_emoji: tempProfileEmoji,
+          avatar_color_hex: tempProfileColor,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update profile.");
+      authenticatedUser = await res.json();
+      updateUserProfileUI();
+      renderConversation();
+      editProfileModal.close();
+      showToast("Profile customization saved.");
+    } catch (err) {
+      const msgEl = document.querySelector("#editProfileMessage");
+      if (msgEl) {
+        msgEl.textContent = err.message;
+        msgEl.hidden = false;
+      }
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+}
+
+if (resetProfileCustomizationBtn) {
+  resetProfileCustomizationBtn.addEventListener("click", async () => {
+    if (!window.confirm("Delete profile customization and reset to default?")) return;
+    try {
+      const res = await apiFetch("/api/user/profile", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to reset profile.");
+      authenticatedUser = await res.json();
+      updateUserProfileUI();
+      renderConversation();
+      settingsDialog.close();
+      showToast("Profile reset to default.");
+    } catch (err) {
+      showToast("Reset failed: " + err.message);
+    }
+  });
+}
+
+// Custom Character Modal Dialog
+const customCharModal = document.querySelector("#customCharModal");
+const customCharForm = document.querySelector("#customCharForm");
+const openCreateCharBtn = document.querySelector("#openCreateCharBtn");
+const closeCustomChar = document.querySelector("#closeCustomChar");
+const cancelCharBtn = document.querySelector("#cancelCharBtn");
+const deleteCharBtn = document.querySelector("#deleteCharBtn");
+
+let editingCharacterId = null;
+let tempCharEmoji = "✨";
+
+function openCustomCharacterDialog(existing = null) {
+  editingCharacterId = existing ? existing.id : null;
+  tempCharEmoji = existing?.avatar_emoji || "✨";
+
+  document.querySelector("#customCharTitle").textContent = existing
+    ? "Edit Custom Character"
+    : "Create Custom Character";
+  document.querySelector("#charNameInput").value = existing?.name || "";
+  document.querySelector("#charPromptInput").value = existing?.system_prompt || "";
+  document.querySelector("#charPreviewEmoji").textContent = tempCharEmoji;
+
+  if (deleteCharBtn) deleteCharBtn.hidden = !existing;
+
+  const charEmojiPalette = document.querySelector("#charEmojiPalette");
+  if (charEmojiPalette) {
+    charEmojiPalette.innerHTML = "";
+    ["✨", "👨‍💻", "🎨", "🦉", "⚡️", "🤖", "🧠", "🔬", "📐", "📚", "🔮", "⚔️"].forEach((emoji) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `emoji-choice-btn ${tempCharEmoji === emoji ? "selected" : ""}`;
+      btn.textContent = emoji;
+      btn.onclick = () => {
+        tempCharEmoji = emoji;
+        charEmojiPalette.querySelectorAll(".emoji-choice-btn").forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        document.querySelector("#charPreviewEmoji").textContent = emoji;
+      };
+      charEmojiPalette.append(btn);
+    });
+  }
+
+  const msg = document.querySelector("#customCharMessage");
+  if (msg) msg.hidden = true;
+
+  if (settingsDialog.open) settingsDialog.close();
+  customCharModal.showModal();
+}
+
+if (openCreateCharBtn) {
+  openCreateCharBtn.addEventListener("click", () => openCustomCharacterDialog(null));
+}
+if (closeCustomChar) {
+  closeCustomChar.addEventListener("click", () => customCharModal.close());
+}
+if (cancelCharBtn) {
+  cancelCharBtn.addEventListener("click", () => customCharModal.close());
+}
+
+if (customCharForm) {
+  customCharForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.querySelector("#charNameInput").value.trim();
+    const prompt = document.querySelector("#charPromptInput").value.trim();
+    if (!name || !prompt) return;
+
+    try {
+      const payload = {
+        name,
+        system_prompt: prompt,
+        avatar_emoji: tempCharEmoji,
+      };
+      const url = editingCharacterId
+        ? `/api/user/characters/${editingCharacterId}`
+        : `/api/user/characters`;
+      const method = editingCharacterId ? "PUT" : "POST";
+
+      const res = await apiFetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to save character.");
+      const saved = await res.json();
+      activePersonaId = saved.id;
+      localStorage.setItem("luma_active_persona_id", saved.id);
+
+      await loadCustomCharacters();
+      customCharModal.close();
+      showToast(`Saved and activated ${saved.name}.`);
+    } catch (err) {
+      const msg = document.querySelector("#customCharMessage");
+      if (msg) {
+        msg.textContent = err.message;
+        msg.hidden = false;
+      }
+    }
+  });
+}
+
+if (deleteCharBtn) {
+  deleteCharBtn.addEventListener("click", async () => {
+    if (!editingCharacterId) return;
+    if (!window.confirm("Delete this custom character?")) return;
+    try {
+      const res = await apiFetch(`/api/user/characters/${editingCharacterId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 204) throw new Error("Failed to delete character.");
+      if (activePersonaId === editingCharacterId) {
+        activePersonaId = "char_luma_default";
+        localStorage.setItem("luma_active_persona_id", activePersonaId);
+      }
+      await loadCustomCharacters();
+      customCharModal.close();
+      showToast("Character deleted.");
+    } catch (err) {
+      showToast("Delete failed: " + err.message);
+    }
+  });
+}
+
+// Camera / OCR Scan Tool
+const ocrScanButton = document.querySelector("#ocrScanButton");
+const ocrFileInput = document.querySelector("#ocrFileInput");
+
+if (ocrScanButton && ocrFileInput) {
+  ocrScanButton.addEventListener("click", () => {
+    ocrFileInput.click();
+  });
+
+  ocrFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    ocrFileInput.value = "";
+
+    showToast("Scanning document with OCR…");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64Data = reader.result;
+        const res = await apiFetch("/api/tools/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64Data }),
+        });
+        if (!res.ok) throw new Error("Failed to scan document.");
+        const data = await res.json();
+        const extracted = data.text?.trim();
+        if (extracted) {
+          const current = messageInput.value.trim();
+          messageInput.value = current ? `${current}\n\n[Scanned Document]:\n${extracted}` : extracted;
+          resizeInput();
+          messageInput.focus();
+          showToast("Document text scanned & inserted into composer.");
+        } else {
+          showToast("No readable text detected in document.");
+        }
+      } catch (err) {
+        showToast("Document scanning failed: " + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 window.addEventListener("popstate", handleExperiencePopState);

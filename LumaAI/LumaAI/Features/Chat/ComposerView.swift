@@ -49,6 +49,10 @@ public struct ComposerView: View {
         self.onFocusChange = onFocusChange
     }
 
+    private var hasInput: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachedImage != nil
+    }
+
     public var body: some View {
         VStack(spacing: 8) {
             // Mode Banner if image mode is active
@@ -56,20 +60,20 @@ public struct ComposerView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.lumaAccent)
+                        .foregroundColor(Color.orbixPurple)
                     Text("Image Generation Mode")
-                        .font(LumaTypography.captionMedium)
-                        .foregroundColor(.lumaAccent)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color.orbixPurple)
                     Spacer()
                     Button(action: onToggleImageMode) {
                         Image(systemName: "xmark")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.lumaSecondaryText)
+                            .foregroundColor(Color.orbixSecondaryText)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
-                .background(Color.lumaAccentLight)
+                .background(Color.orbixLavender.opacity(0.45))
                 .clipShape(Capsule())
                 .padding(.horizontal, 16)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -83,10 +87,10 @@ public struct ComposerView: View {
                             .resizable()
                             .scaledToFill()
                             .frame(width: 48, height: 48)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.lumaBorder, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(Color.orbixCardBorder, lineWidth: 1)
                             )
 
                         Button(action: {
@@ -97,7 +101,7 @@ public struct ComposerView: View {
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 18))
-                                .foregroundColor(.lumaPrimaryText)
+                                .foregroundColor(Color.orbixPrimaryText)
                                 .background(Circle().fill(Color.white))
                         }
                         .offset(x: 6, y: -6)
@@ -105,33 +109,56 @@ public struct ComposerView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Photo Attached")
-                            .font(LumaTypography.captionMedium)
-                            .foregroundColor(.lumaPrimaryText)
-                        Text("Ready to send with your message")
-                            .font(LumaTypography.caption)
-                            .foregroundColor(.lumaSecondaryText)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(Color.orbixPrimaryText)
+                        Text("Ready to analyze with your message")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(Color.orbixSecondaryText)
                     }
 
                     Spacer()
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.lumaSurfaceElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.orbixCardBorder, lineWidth: 1)
+                )
                 .padding(.horizontal, 16)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            // Main Input Capsule
-            HStack(alignment: .bottom, spacing: 6) {
-                // Photo Picker Button
+            // Orbix Studio White Input Capsule / Card
+            HStack(alignment: .center, spacing: 8) {
+                // Camera / OCR Scan Button (Left icon matching reference)
+                Button(action: {
+                    HapticFeedback.light()
+                    onScanText()
+                }) {
+                    Image(systemName: "camera")
+                        .font(.system(size: 18, weight: .regular))
+                        .foregroundColor(Color.orbixSecondaryText)
+                        .frame(width: 38, height: 38)
+                        .background(Color.orbixBackground)
+                        .clipShape(Circle())
+                }
+                .contextMenu {
+                    Button(action: onScanText) {
+                        Label("Scan Text with Camera", systemImage: "text.viewfinder")
+                    }
+                    Button(action: onToggleImageMode) {
+                        Label(isImageMode ? "Switch to Text Mode" : "Generate AI Image", systemImage: "sparkles")
+                    }
+                }
+
+                // Photos Picker Button
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Image(systemName: "photo")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
-                        .frame(width: 36, height: 36)
-                        .background(Color.black.opacity(0.04))
-                        .clipShape(Circle())
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundColor(Color.orbixSecondaryText)
+                        .frame(width: 32, height: 32)
                 }
                 .onChange(of: selectedPhotoItem) { newItem in
                     guard let item = newItem else { return }
@@ -146,131 +173,116 @@ public struct ComposerView: View {
                         }
                     }
                 }
-                .contextMenu {
-                    Button(action: onToggleImageMode) {
-                        Label(isImageMode ? "Switch to Text Mode" : "Generate AI Image", systemImage: "sparkles")
-                    }
-                }
 
-                // Live Camera OCR Text Scanner Button
-                Button(action: {
-                    HapticFeedback.light()
-                    onScanText()
-                }) {
-                    Image(systemName: "text.viewfinder")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
-                        .frame(width: 36, height: 36)
-                        .background(Color.black.opacity(0.04))
-                        .clipShape(Circle())
-                }
-
-                // Voice Dictation / Recording Button
-                Button(action: {
-                    HapticFeedback.light()
-                    onToggleVoice()
-                }) {
-                    ZStack {
-                        if isDictating {
-                            Circle()
-                                .fill(Color.lumaError.opacity(0.18))
-                                .frame(width: 36, height: 36)
-                                .scaleEffect(1.0 + CGFloat(speechAudioLevel) * 0.35)
-                                .animation(.easeInOut(duration: 0.12), value: speechAudioLevel)
-
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.lumaError)
-                        } else {
-                            Circle()
-                                .fill(Color.black.opacity(0.04))
-                                .frame(width: 36, height: 36)
-
-                            Image(systemName: "mic")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundColor(Color(red: 70/255, green: 65/255, blue: 60/255))
-                        }
-                    }
-                    .frame(width: 36, height: 36)
-                }
-                .contextMenu {
-                    Button(action: onOpenVoiceMode) {
-                        Label("Open Voice Conversation Mode", systemImage: "waveform")
-                    }
-                }
-
-                // High-Contrast Input Field with Crisp Readable Placeholder
+                // Center Text Input with High Contrast Placeholder ("Ask Anything...")
                 ZStack(alignment: .leading) {
                     if text.isEmpty {
-                        Text(isImageMode ? "Describe the image to generate…" : "Message Luma AI…")
-                            .font(LumaTypography.body)
-                            .foregroundColor(Color(red: 120/255, green: 113/255, blue: 108/255)) // Warm gray #78716C (high contrast)
+                        Text(isImageMode ? "Describe image to create…" : "Ask Anything…")
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(Color.orbixSecondaryText.opacity(0.85))
                             .padding(.horizontal, 4)
                             .allowsHitTesting(false)
                     }
 
                     TextField("", text: $text, axis: .vertical)
-                        .font(LumaTypography.body)
-                        .foregroundColor(.lumaPrimaryText)
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundColor(Color.orbixPrimaryText)
                         .focused($isFocused)
                         .lineLimit(1...5)
-                        .frame(minHeight: 38)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
                         .padding(.horizontal, 4)
                         .onChange(of: isFocused) { focused in
                             onFocusChange?(focused)
                         }
                 }
 
-                // Send / Stop Button with Distinct Enabled and Disabled States
+                // Action Controls on Right
                 if isStreaming {
+                    // Stop Button
                     Button(action: {
                         HapticFeedback.medium()
                         onStop()
                     }) {
                         ZStack {
                             Circle()
-                                .fill(Color.lumaPrimaryText)
-                                .frame(width: 38, height: 38)
+                                .fill(Color.orbixBlackPill)
+                                .frame(width: 40, height: 40)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color.white)
                                 .frame(width: 12, height: 12)
                         }
                     }
-                } else {
+                } else if hasInput {
+                    // Active Send Button
                     Button(action: {
-                        guard canSend else { return }
-                        HapticFeedback.light()
+                        HapticFeedback.medium()
                         onSend()
                     }) {
                         ZStack {
                             Circle()
-                                .fill(canSend ? Color.lumaPrimaryText : Color(red: 228/255, green: 226/255, blue: 224/255))
-                                .frame(width: 38, height: 38)
+                                .fill(Color.orbixBlackPill)
+                                .frame(width: 40, height: 40)
                             Image(systemName: "arrow.up")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(canSend ? Color.white : Color(red: 140/255, green: 135/255, blue: 130/255))
+                                .foregroundColor(.white)
+                        }
+                        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                } else {
+                    // Orbix Studio Purple Circular Audio Waveform Button (#8765F5) - Enters Voice Assistant Mode
+                    Button(action: {
+                        HapticFeedback.medium()
+                        onOpenVoiceMode()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.orbixPurple)
+                                .frame(width: 40, height: 40)
+
+                            if isDictating {
+                                Circle()
+                                    .stroke(Color.white.opacity(0.5), lineWidth: 2)
+                                    .frame(width: 40, height: 40)
+                                    .scaleEffect(1.0 + CGFloat(speechAudioLevel) * 0.3)
+                                    .animation(.easeInOut(duration: 0.12), value: speechAudioLevel)
+
+                                Image(systemName: "waveform")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                            } else {
+                                Image(systemName: "waveform")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .contentShape(Circle())
+                        .shadow(color: Color.orbixPurple.opacity(0.35), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Enter voice assistant mode")
+                    .contextMenu {
+                        Button(action: onOpenVoiceMode) {
+                            Label("Voice Assistant Mode", systemImage: "waveform.circle.fill")
+                        }
+                        Button(action: onToggleVoice) {
+                            Label(isDictating ? "Stop Dictation" : "Dictate into Text", systemImage: "mic.fill")
                         }
                     }
-                    .disabled(!canSend)
+                    .transition(.scale.combined(with: .opacity))
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.lumaSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .background(Color.white)
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.lumaBorder, lineWidth: 1)
+                Capsule()
+                    .stroke(Color.orbixCardBorder, lineWidth: 1)
             )
+            .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
             .padding(.horizontal, 16)
         }
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .background(Color.lumaCanvas)
-    }
-
-    private var canSend: Bool {
-        (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || attachedImage != nil) && !isStreaming
+        .padding(.vertical, 4)
     }
 }

@@ -1,5 +1,9 @@
 import Foundation
 
+public struct EmptyResponse: Codable {
+    public init() {}
+}
+
 public protocol APIClientProtocol: AnyObject {
     var configuration: APIConfiguration { get set }
     func request<T: Decodable>(_ endpoint: APIEndpoint, body: (any Encodable)?) async throws -> T
@@ -8,6 +12,14 @@ public protocol APIClientProtocol: AnyObject {
     func downloadImageData(from urlString: String) async throws -> Data
     func transcribeAudio(data: Data, mimeType: String) async throws -> String
     func ensureSession() async throws
+    func fetchUserProfile() async throws -> User
+    func updateUserProfile(customName: String?, bio: String?, avatarEmoji: String?, avatarColorHex: String?) async throws -> User
+    func uploadProfilePhoto(imageData: Data) async throws -> User
+    func deleteProfilePhoto() async throws -> User
+    func resetUserProfile() async throws -> User
+    func fetchCustomCharacters() async throws -> [CustomCharacterRemote]
+    func createRemoteCustomCharacter(_ payload: CustomCharacterPayload) async throws -> CustomCharacterRemote
+    func deleteRemoteCustomCharacter(id: String) async throws
 }
 
 public extension APIClientProtocol {
@@ -20,6 +32,46 @@ public extension APIClientProtocol {
     }
 
     func ensureSession() async throws {}
+
+    func fetchUserProfile() async throws -> User {
+        try await request(.userProfile, body: nil)
+    }
+
+    func updateUserProfile(customName: String?, bio: String?, avatarEmoji: String?, avatarColorHex: String?) async throws -> User {
+        let req = UpdateProfileRequest(
+            customName: customName,
+            bio: bio,
+            avatarEmoji: avatarEmoji,
+            avatarColorHex: avatarColorHex
+        )
+        return try await request(.updateUserProfile, body: req)
+    }
+
+    func uploadProfilePhoto(imageData: Data) async throws -> User {
+        let base64String = "data:image/jpeg;base64," + imageData.base64EncodedString()
+        let payload = UploadPhotoPayload(image: base64String)
+        return try await request(.uploadProfilePhoto, body: payload)
+    }
+
+    func deleteProfilePhoto() async throws -> User {
+        try await request(.deleteProfilePhoto, body: nil)
+    }
+
+    func resetUserProfile() async throws -> User {
+        try await request(.resetUserProfile, body: nil)
+    }
+
+    func fetchCustomCharacters() async throws -> [CustomCharacterRemote] {
+        try await request(.userCharacters, body: nil)
+    }
+
+    func createRemoteCustomCharacter(_ payload: CustomCharacterPayload) async throws -> CustomCharacterRemote {
+        try await request(.userCharacters, body: payload)
+    }
+
+    func deleteRemoteCustomCharacter(id: String) async throws {
+        let _: ServerHealth = try await request(.userCharacter(id: id), body: nil)
+    }
 }
 
 public final class APIClient: APIClientProtocol {
@@ -120,8 +172,13 @@ public final class APIClient: APIClientProtocol {
 
         saveCookies(from: response, for: urlRequest.url)
 
-        if T.self == ServerHealth.self && data.isEmpty {
-            return ServerHealth(status: "ok") as! T
+        if data.isEmpty {
+            if T.self == ServerHealth.self {
+                return ServerHealth(status: "ok") as! T
+            }
+            if let empty = EmptyResponse() as? T {
+                return empty
+            }
         }
 
         do {
@@ -138,15 +195,16 @@ public final class APIClient: APIClientProtocol {
                 do {
                     let endpoint = APIEndpoint.chatStream
                     let payloads = messages
-                        .filter { $0.status == .complete && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                        .filter { ($0.role == .user || $0.role == .assistant) && $0.status == .complete && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                        .suffix(20)
                         .map { SendMessagePayload(role: $0.role.rawValue, content: $0.content) }
 
-                    guard !payloads.isEmpty else {
+                    guard !payloads.isEmpty, payloads.last?.role == "user" else {
                         continuation.finish()
                         return
                     }
 
-                    var urlRequest = try createRequest(endpoint, body: ChatStreamRequest(messages: payloads))
+                    var urlRequest = try createRequest(endpoint, body: ChatStreamRequest(messages: Array(payloads)))
                     urlRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
                     var (bytes, response) = try await session.bytes(for: urlRequest)

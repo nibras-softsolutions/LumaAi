@@ -7,8 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F1A100010000000000000002 /* LumaWidgetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100010000000000000001 /* LumaWidgetStore.swift */; };
+		F1A100010000000000000003 /* LumaWidgetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100010000000000000001 /* LumaWidgetStore.swift */; };
+		F1A100020000000000000002 /* LumaWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100020000000000000001 /* LumaWidgetIntents.swift */; };
+		F1A100020000000000000003 /* LumaWidgetIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100020000000000000001 /* LumaWidgetIntents.swift */; };
+		F1A100030000000000000002 /* LumaDeepLinkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100030000000000000001 /* LumaDeepLinkManager.swift */; };
+		F1A100030000000000000003 /* LumaDeepLinkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A100030000000000000001 /* LumaDeepLinkManager.swift */; };
+		F1A200010000000000000002 /* LumaAIWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A200010000000000000001 /* LumaAIWidgetsBundle.swift */; };
+		F1A200020000000000000002 /* LumaAIWidgetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A200020000000000000001 /* LumaAIWidgetsView.swift */; };
+		F1A200050000000000000002 /* LumaAIWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F1A200050000000000000001 /* LumaAIWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+
+		05E532A01CC09BFD37973E5C /* AppSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F1D75193DD6CF0FF86EE50 /* AppSidebarView.swift */; };
 		08BA6B6666710C207700126D /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3042CA456A720818F9C2A42 /* AuthViewModel.swift */; };
 		09A0D4016728C79E878F2F6D /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10CC8B1427C2E249063778ED /* HapticFeedback.swift */; };
+		09F252A9B7A4A8F21B450E24 /* CustomCharacter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBD9343FCE725480D2332C85 /* CustomCharacter.swift */; };
 		148C036093D990C288F4ADDA /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28157A7D6664184A090771C6 /* ChatViewModel.swift */; };
 		192F9E60FFDCD99D773A0A93 /* NetworkError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6CDD9253DD00689EDF5D78A /* NetworkError.swift */; };
 		1FF07A8DE03E102E9BD6F2A2 /* AudioVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAC80D709A5C3B10F2E4A879 /* AudioVisualizerView.swift */; };
@@ -18,6 +30,7 @@
 		2CA1F62A58CE3EAC307A5111 /* LumaAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7251316536D02A2F06C6A145 /* LumaAIApp.swift */; };
 		309123D28DB66A79024C738B /* ImageGenerationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EFA2831C310A20B5CEBF4A /* ImageGenerationViewModel.swift */; };
 		324C8037F346050F69561858 /* ImageGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */; };
+		3890C8EE5C32D51DDC6557FB /* CustomCharacterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A6ADE96AE4DE970862C5E30 /* CustomCharacterTests.swift */; };
 		3D83BC8800434C1BC885C4FF /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35B60D6924377CE8669D2E9 /* MessageBubbleView.swift */; };
 		405E988FD9AF8168998C5B62 /* TextToSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC4930FF2CEEE8A47F4F791 /* TextToSpeechService.swift */; };
 		422074C01015754AF9DCCF22 /* MainContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */; };
@@ -30,6 +43,7 @@
 		6379D07CCAA2B646F187A6CA /* RecognizedTextBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD0AF39763B8C21D86F989E /* RecognizedTextBlock.swift */; };
 		6920D77BDBA3A0251BA2AEE0 /* VoiceConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7D279E92F4B338FE188238 /* VoiceConversationView.swift */; };
 		705E8D8BF2533408FA7232EB /* StatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */; };
+		A1B2C3D4E5F6010203040506 /* UserProfileAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6010203040506 /* UserProfileAvatarView.swift */; };
 		808C985C1F924B772796AF83 /* MarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B248F4017DD787185D2980B /* MarkdownView.swift */; };
 		80DDB003C1A14E0FD35AD8E9 /* ImageGenerationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E943CEDD8EB87FC40657F6D7 /* ImageGenerationView.swift */; };
 		87E149A209232D0C8FA7DE19 /* SpeechRecognitionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC289D99D2549118E0DE898 /* SpeechRecognitionService.swift */; };
@@ -41,8 +55,10 @@
 		9CFADB5B8A5376CF94A298FB /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A889358EEA99460948AD4672 /* SettingsViewModelTests.swift */; };
 		9D6D8FB2D8DF72005108B009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */; };
 		A4A9F6FDA9DA1FE3FE4706D7 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89F5732A8AEC27C2998CA83 /* OnboardingView.swift */; };
+		A53DD5A6A28816D470F6D267 /* EditCharacterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6767E44D2E92712163876F3 /* EditCharacterView.swift */; };
 		AB8DC3BB22CF3FC744D356F7 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F0794D3C4A2495F9DC6C82 /* ConversationStore.swift */; };
 		ACFE3C4AE97B2DE364E3E33D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 65C33C65D61C8D3EFF4C4ADF /* Assets.xcassets */; };
+		B2386F9316F5000E9EF6395E /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C89791CBC2D3D4E04BC573E1 /* EditProfileView.swift */; };
 		BA7620FE1B2AB7265DF0BCA8 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E5AE78BAF20BB47F965EA4 /* KeychainHelper.swift */; };
 		BAC511A0557329A3E5C5BFE4 /* LumaTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */; };
 		BC3FE9AA791791B7236B8A46 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436FD0181301A5F5BEF8F87D /* AuthenticationManager.swift */; };
@@ -77,6 +93,17 @@
 		};
 /* End PBXContainerItemProxy section */
 
+
+/* Begin PBXContainerItemProxy section */
+		F1A800010000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 85F3E57C504DC2F55DEC7035 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F1A400010000000000000001;
+			remoteInfo = LumaAIWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0A475F1A9F82552488CBCD21 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
 		0F2FA4385AB7022E4C7B812E /* VoiceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceViewModel.swift; sourceTree = "<group>"; };
@@ -104,6 +131,7 @@
 		7251316536D02A2F06C6A145 /* LumaAIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaAIApp.swift; sourceTree = "<group>"; };
 		7281576778251B3040C4A104 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		72C7B249A0ED089B09DDD42C /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		7A6ADE96AE4DE970862C5E30 /* CustomCharacterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCharacterTests.swift; sourceTree = "<group>"; };
 		8258EA4C87E16ACE887358CA /* ColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorPalette.swift; sourceTree = "<group>"; };
 		8ADB87313ABBAE6BAF15C655 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8B248F4017DD787185D2980B /* MarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownView.swift; sourceTree = "<group>"; };
@@ -117,6 +145,7 @@
 		A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEndpointTests.swift; sourceTree = "<group>"; };
 		A686EF1A9FE9582F3C12830D /* LiveCameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveCameraService.swift; sourceTree = "<group>"; };
 		A889358EEA99460948AD4672 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
+		A9F1D75193DD6CF0FF86EE50 /* AppSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSidebarView.swift; sourceTree = "<group>"; };
 		AAC80D709A5C3B10F2E4A879 /* AudioVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioVisualizerView.swift; sourceTree = "<group>"; };
 		AC07611C61C65C0D51287C4F /* ImageViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewerView.swift; sourceTree = "<group>"; };
 		AE0079BED0F76442B7AD125E /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
@@ -125,20 +154,49 @@
 		B6CDD9253DD00689EDF5D78A /* NetworkError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkError.swift; sourceTree = "<group>"; };
 		C175457C4B135F8262DC3246 /* LiveTextScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTextScannerView.swift; sourceTree = "<group>"; };
 		C5EFA2831C310A20B5CEBF4A /* ImageGenerationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGenerationViewModel.swift; sourceTree = "<group>"; };
+		C89791CBC2D3D4E04BC573E1 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
 		C89F5732A8AEC27C2998CA83 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		C9832724860A44FD6C4A4BB9 /* ServerStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerStatus.swift; sourceTree = "<group>"; };
 		CCD5498F1432E973287FC636 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
 		D2241EE881613773AA1A4787 /* ComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerView.swift; sourceTree = "<group>"; };
 		D386BBDAC98337D5048E2CC9 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
+		D6767E44D2E92712163876F3 /* EditCharacterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditCharacterView.swift; sourceTree = "<group>"; };
 		DA7D279E92F4B338FE188238 /* VoiceConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceConversationView.swift; sourceTree = "<group>"; };
 		DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A6010203040506 /* UserProfileAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileAvatarView.swift; sourceTree = "<group>"; };
 		DFC289D99D2549118E0DE898 /* SpeechRecognitionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionService.swift; sourceTree = "<group>"; };
 		E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGeneration.swift; sourceTree = "<group>"; };
 		E943CEDD8EB87FC40657F6D7 /* ImageGenerationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGenerationView.swift; sourceTree = "<group>"; };
 		EAF17E95EAD6A6E48901E083 /* SSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParser.swift; sourceTree = "<group>"; };
 		ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaTextField.swift; sourceTree = "<group>"; };
+		FBD9343FCE725480D2332C85 /* CustomCharacter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCharacter.swift; sourceTree = "<group>"; };
+
+		F1A100010000000000000001 /* LumaWidgetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaWidgetStore.swift; sourceTree = "<group>"; };
+		F1A100020000000000000001 /* LumaWidgetIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaWidgetIntents.swift; sourceTree = "<group>"; };
+		F1A100030000000000000001 /* LumaDeepLinkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaDeepLinkManager.swift; sourceTree = "<group>"; };
+		F1A100040000000000000001 /* LumaAI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaAI.entitlements; sourceTree = "<group>"; };
+		F1A200010000000000000001 /* LumaAIWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaAIWidgetsBundle.swift; sourceTree = "<group>"; };
+		F1A200020000000000000001 /* LumaAIWidgetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaAIWidgetsView.swift; sourceTree = "<group>"; };
+		F1A200030000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F1A200040000000000000001 /* LumaAIWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LumaAIWidgets.entitlements; sourceTree = "<group>"; };
+		F1A200050000000000000001 /* LumaAIWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LumaAIWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F1A700010000000000000001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F1A200050000000000000002 /* LumaAIWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8D89536727E251D6F2EF5690 /* Frameworks */ = {
@@ -164,6 +222,8 @@
 		13A5CB9876083FB882172C94 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				D6767E44D2E92712163876F3 /* EditCharacterView.swift */,
+				C89791CBC2D3D4E04BC573E1 /* EditProfileView.swift */,
 				DAEA4B44AE3C27E9ECEBBF1F /* SettingsView.swift */,
 				AE0079BED0F76442B7AD125E /* SettingsViewModel.swift */,
 			);
@@ -184,6 +244,9 @@
 			children = (
 				61F0794D3C4A2495F9DC6C82 /* ConversationStore.swift */,
 				4EB16FCB6AEC817888FC5758 /* UserPreferences.swift */,
+				F1A100010000000000000001 /* LumaWidgetStore.swift */,
+				F1A100020000000000000001 /* LumaWidgetIntents.swift */,
+				F1A100030000000000000001 /* LumaDeepLinkManager.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -212,6 +275,7 @@
 			children = (
 				60E4CF31B93007552FF55EAB /* LumaAI */,
 				EC46480084623C038C1C9BEE /* LumaAITests */,
+				F1A300010000000000000001 /* LumaAIWidgets */,
 				5EE85CF7D60A002C61D99203 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -234,8 +298,21 @@
 				53263EEA716F6EA5CD429A74 /* LumaButton.swift */,
 				ED5C048FF6C82CC6E0103BCA /* LumaTextField.swift */,
 				DCE9CC46B6664B446E4CA6FD /* StatusBadge.swift */,
+				B1C2D3E4F5A6010203040506 /* UserProfileAvatarView.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		
+		F1A300010000000000000001 /* LumaAIWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				F1A200010000000000000001 /* LumaAIWidgetsBundle.swift */,
+				F1A200020000000000000001 /* LumaAIWidgetsView.swift */,
+				F1A200030000000000000001 /* Info.plist */,
+				F1A200040000000000000001 /* LumaAIWidgets.entitlements */,
+			);
+			path = LumaAIWidgets;
 			sourceTree = "<group>";
 		};
 		5EE85CF7D60A002C61D99203 /* Products */ = {
@@ -243,6 +320,7 @@
 			children = (
 				42B0B07606D64F9544C2C747 /* LumaAI.app */,
 				B12AB0ECBB1E75CE252C0AB7 /* LumaAITests.xctest */,
+				F1A200050000000000000001 /* LumaAIWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -305,6 +383,7 @@
 		DE170F2C339C3D203B96BFD7 /* Main */ = {
 			isa = PBXGroup;
 			children = (
+				A9F1D75193DD6CF0FF86EE50 /* AppSidebarView.swift */,
 				9E67FD5005BEBE98AD1F5A10 /* MainContainerView.swift */,
 			);
 			path = Main;
@@ -332,6 +411,7 @@
 				65C33C65D61C8D3EFF4C4ADF /* Assets.xcassets */,
 				6B805BDFBCE897D40290477C /* Info.plist */,
 				8ADB87313ABBAE6BAF15C655 /* LaunchScreen.storyboard */,
+				F1A100040000000000000001 /* LumaAI.entitlements */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -342,6 +422,7 @@
 				A3D25B38BF8E9F0B3C71B1B3 /* APIEndpointTests.swift */,
 				9DA50AAC568FC11795CBDA77 /* ChatViewModelTests.swift */,
 				1557322300F55C521B669BC1 /* ConversationStoreTests.swift */,
+				7A6ADE96AE4DE970862C5E30 /* CustomCharacterTests.swift */,
 				6FB01928141F956B0643F685 /* LiveTextScannerTests.swift */,
 				6CC2D09471F21D4A493C83C8 /* ModelDecodingTests.swift */,
 				A889358EEA99460948AD4672 /* SettingsViewModelTests.swift */,
@@ -355,6 +436,7 @@
 			children = (
 				6F089E1436E610BC968EB943 /* ChatMessage.swift */,
 				0A475F1A9F82552488CBCD21 /* Conversation.swift */,
+				FBD9343FCE725480D2332C85 /* CustomCharacter.swift */,
 				E7884FEBFFF2677F6DB44115 /* ImageGeneration.swift */,
 				C9832724860A44FD6C4A4BB9 /* ServerStatus.swift */,
 				8E299E55BB77DCAB1FDB0D47 /* User.swift */,
@@ -388,6 +470,15 @@
 		};
 /* End PBXGroup section */
 
+
+/* Begin PBXTargetDependency section */
+		F1A800020000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F1A400010000000000000001 /* LumaAIWidgets */;
+			targetProxy = F1A800010000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin PBXNativeTarget section */
 		90C81F797BD1FF3D8C8287F0 /* LumaAITests */ = {
 			isa = PBXNativeTarget;
@@ -414,10 +505,12 @@
 				124CB825067D6E98E8B630E5 /* Sources */,
 				041A38614DA3FA99D018F778 /* Resources */,
 				8D89536727E251D6F2EF5690 /* Frameworks */,
+				F1A700010000000000000001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F1A800020000000000000001 /* PBXTargetDependency */,
 			);
 			name = LumaAI;
 			packageProductDependencies = (
@@ -426,6 +519,26 @@
 			productName = LumaAI;
 			productReference = 42B0B07606D64F9544C2C747 /* LumaAI.app */;
 			productType = "com.apple.product-type.application";
+		};
+
+		F1A400010000000000000001 /* LumaAIWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F1A600010000000000000001 /* Build configuration list for PBXNativeTarget "LumaAIWidgets" */;
+			buildPhases = (
+				F1A500010000000000000001 /* Sources */,
+				F1A500020000000000000001 /* Frameworks */,
+				F1A500030000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LumaAIWidgets;
+			packageProductDependencies = (
+			);
+			productName = LumaAIWidgets;
+			productReference = F1A200050000000000000001 /* LumaAIWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -461,6 +574,7 @@
 			targets = (
 				955F94D41EF46B9CB758E9EE /* LumaAI */,
 				90C81F797BD1FF3D8C8287F0 /* LumaAITests */,
+				F1A400010000000000000001 /* LumaAIWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -485,6 +599,7 @@
 				E7C0D2A268EC758B3ED1896F /* APIClient.swift in Sources */,
 				2669DC6ED7541FAF92BDCEFB /* APIEndpoint.swift in Sources */,
 				96143A8B82813EEE151D0015 /* AppEnvironment.swift in Sources */,
+				05E532A01CC09BFD37973E5C /* AppSidebarView.swift in Sources */,
 				1FF07A8DE03E102E9BD6F2A2 /* AudioVisualizerView.swift in Sources */,
 				CC5A812AE1329AFB0DD9DBDA /* AuthView.swift in Sources */,
 				08BA6B6666710C207700126D /* AuthViewModel.swift in Sources */,
@@ -497,6 +612,9 @@
 				6200EB6EDE1C0F4BEFDEC929 /* ComposerView.swift in Sources */,
 				CEE7E0CEABCB1816E382F25C /* Conversation.swift in Sources */,
 				AB8DC3BB22CF3FC744D356F7 /* ConversationStore.swift in Sources */,
+				09F252A9B7A4A8F21B450E24 /* CustomCharacter.swift in Sources */,
+				A53DD5A6A28816D470F6D267 /* EditCharacterView.swift in Sources */,
+				B2386F9316F5000E9EF6395E /* EditProfileView.swift in Sources */,
 				2B87A053D91D9EA1DF684627 /* EmptyStateView.swift in Sources */,
 				09A0D4016728C79E878F2F6D /* HapticFeedback.swift in Sources */,
 				8B370635FCE743F28049507F /* HistoryView.swift in Sources */,
@@ -528,6 +646,10 @@
 				BFDA29AE00FAF1AF1790C74D /* Typography.swift in Sources */,
 				EB2C7AF7A2554481290B4A84 /* User.swift in Sources */,
 				4F1ED91483EA3E5E583494E4 /* UserPreferences.swift in Sources */,
+				A1B2C3D4E5F6010203040506 /* UserProfileAvatarView.swift in Sources */,
+				F1A100010000000000000002 /* LumaWidgetStore.swift in Sources */,
+				F1A100020000000000000002 /* LumaWidgetIntents.swift in Sources */,
+				F1A100030000000000000002 /* LumaDeepLinkManager.swift in Sources */,
 				6920D77BDBA3A0251BA2AEE0 /* VoiceConversationView.swift in Sources */,
 				95C650708682F9BB13E6335E /* VoiceViewModel.swift in Sources */,
 			);
@@ -540,6 +662,7 @@
 				91F006EA2A4D56DB686130F2 /* APIEndpointTests.swift in Sources */,
 				DCC00E4C6215D08549F1E7FF /* ChatViewModelTests.swift in Sources */,
 				635059B333D2E889D72B385A /* ConversationStoreTests.swift in Sources */,
+				3890C8EE5C32D51DDC6557FB /* CustomCharacterTests.swift in Sources */,
 				E95F81E76FC6FE322F6100F6 /* LiveTextScannerTests.swift in Sources */,
 				8B1355B56E6FEA506ED77F4D /* ModelDecodingTests.swift in Sources */,
 				482EBD8669AE43D0766638B0 /* SSEParserTests.swift in Sources */,
@@ -548,6 +671,33 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+		F1A500010000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F1A200010000000000000002 /* LumaAIWidgetsBundle.swift in Sources */,
+				F1A200020000000000000002 /* LumaAIWidgetsView.swift in Sources */,
+				F1A100010000000000000003 /* LumaWidgetStore.swift in Sources */,
+				F1A100020000000000000003 /* LumaWidgetIntents.swift in Sources */,
+				F1A100030000000000000003 /* LumaDeepLinkManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F1A500020000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F1A500030000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
 
 /* Begin PBXTargetDependency section */
 		9DB1672690994D5D1E6ECC08 /* PBXTargetDependency */ = {
@@ -623,6 +773,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				CODE_SIGN_ENTITLEMENTS = LumaAI/Resources/LumaAI.entitlements;
 				INFOPLIST_FILE = LumaAI/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -669,6 +820,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				CODE_SIGN_ENTITLEMENTS = LumaAI/Resources/LumaAI.entitlements;
 				INFOPLIST_FILE = LumaAI/Resources/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -771,6 +923,68 @@
 			};
 			name = Debug;
 		};
+
+		F1A600020000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LumaAIWidgets/LumaAIWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LumaAIWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAI.LumaAIWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F1A600030000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LumaAIWidgets/LumaAIWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S9HCF8W2FW;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LumaAIWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xfrontend -disable-sandbox";
+				PRODUCT_BUNDLE_IDENTIFIER = com.nibrassoftsolutions.LumaAI.LumaAIWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -797,6 +1011,16 @@
 			buildConfigurations = (
 				1880A8EA4626A0AD714ACFDD /* Debug */,
 				D8EEFC28AFB383DACCF1502F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+
+		F1A600010000000000000001 /* Build configuration list for PBXNativeTarget "LumaAIWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1A600020000000000000001 /* Debug */,
+				F1A600030000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

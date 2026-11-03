@@ -25,6 +25,13 @@ public enum APIEndpoint {
     case generateImage
     case viewImage(id: String)
     case transcribeVoice
+    case userProfile
+    case updateUserProfile
+    case uploadProfilePhoto
+    case deleteProfilePhoto
+    case resetUserProfile
+    case userCharacters
+    case userCharacter(id: String)
 
     public static var aiHealth: APIEndpoint { .healthAI }
     public static var imageGenerate: APIEndpoint { .generateImage }
@@ -57,15 +64,27 @@ public enum APIEndpoint {
             return base.appendingPathComponent("api/image/view/\(id)")
         case .transcribeVoice:
             return base.appendingPathComponent("api/voice/transcribe")
+        case .userProfile, .updateUserProfile, .resetUserProfile:
+            return base.appendingPathComponent("api/user/profile")
+        case .uploadProfilePhoto, .deleteProfilePhoto:
+            return base.appendingPathComponent("api/user/profile/photo")
+        case .userCharacters:
+            return base.appendingPathComponent("api/user/characters")
+        case .userCharacter(let id):
+            return base.appendingPathComponent("api/user/characters/\(id)")
         }
     }
 
     public var httpMethod: String {
         switch self {
-        case .health, .healthAI, .me, .viewImage:
+        case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters:
             return "GET"
-        case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice:
+        case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice, .uploadProfilePhoto:
             return "POST"
+        case .updateUserProfile:
+            return "PUT"
+        case .deleteProfilePhoto, .resetUserProfile, .userCharacter:
+            return "DELETE"
         }
     }
 }
@@ -88,4 +107,69 @@ public struct ForgotPasswordRequest: Codable {
 
 public struct ForgotPasswordResponse: Codable {
     public let message: String
+}
+
+public struct UpdateProfileRequest: Codable {
+    public let custom_name: String?
+    public let bio: String?
+    public let avatar_emoji: String?
+    public let avatar_color_hex: String?
+
+    public init(
+        customName: String?,
+        bio: String?,
+        avatarEmoji: String?,
+        avatarColorHex: String?
+    ) {
+        self.custom_name = customName
+        self.bio = bio
+        self.avatar_emoji = avatarEmoji
+        self.avatar_color_hex = avatarColorHex
+    }
+}
+
+public struct UploadPhotoPayload: Codable {
+    public let image: String
+
+    public init(image: String) {
+        self.image = image
+    }
+}
+
+public struct CustomCharacterPayload: Codable {
+    public let id: String?
+    public let name: String
+    public let system_prompt: String
+    public let avatar_emoji: String
+
+    public init(
+        id: String? = nil,
+        name: String,
+        systemPrompt: String,
+        avatarEmoji: String
+    ) {
+        self.id = id
+        self.name = name
+        self.system_prompt = systemPrompt
+        self.avatar_emoji = avatarEmoji
+    }
+}
+
+public struct CustomCharacterRemote: Codable, Identifiable {
+    public let id: String
+    public let name: String
+    public let system_prompt: String
+    public let avatar_emoji: String
+
+    public init(
+        id: String,
+        name: String,
+        systemPrompt: String,
+        avatarEmoji: String
+    ) {
+        self.id = id
+        self.name = name
+        self.system_prompt = systemPrompt
+        self.avatar_emoji = avatarEmoji
+    }
 }

@@ -2,18 +2,29 @@ import SwiftUI
 
 public extension Color {
     // Canvas & Surfaces
-    static let lumaCanvas = Color(red: 250/255, green: 249/255, blue: 246/255) // #FAF9F6
+    static let lumaCanvas = Color(red: 248/255, green: 248/255, blue: 252/255) // #F8F8FC (Orbix Studio Canvas)
     static let lumaSurface = Color.white
-    static let lumaSurfaceElevated = Color(red: 245/255, green: 245/255, blue: 244/255) // #F5F5F4
+    static let lumaSurfaceElevated = Color(red: 244/255, green: 244/255, blue: 250/255)
 
     // Text & Content
-    static let lumaPrimaryText = Color(red: 28/255, green: 25/255, blue: 23/255) // #1C1917
-    static let lumaSecondaryText = Color(red: 120/255, green: 113/255, blue: 108/255) // #78716C
-    static let lumaTertiaryText = Color(red: 168/255, green: 162/255, blue: 158/255) // #A8A29E
+    static let lumaPrimaryText = Color(red: 25/255, green: 25/255, blue: 29/255) // #19191D
+    static let lumaSecondaryText = Color(red: 119/255, green: 119/255, blue: 131/255) // #777783
+    static let lumaTertiaryText = Color(red: 168/255, green: 168/255, blue: 178/255)
 
     // Borders & Dividers
-    static let lumaBorder = Color(red: 231/255, green: 229/255, blue: 228/255) // #E7E5E4
-    static let lumaBorderSubtle = Color(red: 245/255, green: 245/255, blue: 244/255)
+    static let lumaBorder = Color(red: 234/255, green: 234/255, blue: 246/255) // #EAEAFA
+    static let lumaBorderSubtle = Color(red: 242/255, green: 242/255, blue: 250/255)
+
+    // Orbix Studio Design Tokens
+    static let orbixBackground = Color(red: 248/255, green: 248/255, blue: 252/255) // #F8F8FC
+    static let orbixLavender = Color(red: 217/255, green: 217/255, blue: 245/255)   // #D9D9F5
+    static let orbixLavenderSoft = Color(red: 236/255, green: 236/255, blue: 251/255)
+    static let orbixPurple = Color(red: 135/255, green: 101/255, blue: 245/255)     // #8765F5
+    static let orbixPrimaryText = Color(red: 25/255, green: 25/255, blue: 29/255)   // #19191D
+    static let orbixSecondaryText = Color(red: 119/255, green: 119/255, blue: 131/255) // #777783
+    static let orbixCardBorder = Color(red: 234/255, green: 234/255, blue: 248/255)
+    static let orbixBlackPill = Color(red: 22/255, green: 22/255, blue: 26/255)
+    static let orbixChipBackground = Color(red: 244/255, green: 244/255, blue: 250/255)
 
     // Accents
     static let lumaAccent = Color(red: 37/255, green: 99/255, blue: 235/255) // #2563EB
@@ -25,11 +36,30 @@ public extension Color {
     static let lumaError = Color(red: 220/255, green: 38/255, blue: 38/255)
     static let lumaWarning = Color(red: 217/255, green: 119/255, blue: 6/255)
 
-    // Recommended Settings Palette
-    static let settingsBackground = Color(red: 248/255, green: 247/255, blue: 243/255) // #F8F7F3
+    // Recommended Settings Palette (Harmonized with Orbix Studio)
+    static let settingsBackground = Color(red: 248/255, green: 248/255, blue: 252/255) // #F8F8FC
     static let settingsCard = Color.white // #FFFFFF
-    static let settingsPrimaryText = Color(red: 28/255, green: 28/255, blue: 28/255) // #1C1C1C
-    static let settingsSecondaryText = Color(red: 111/255, green: 111/255, blue: 111/255) // #6F6F6F
-    static let settingsSectionLabel = Color(red: 119/255, green: 115/255, blue: 111/255) // #77736F
-    static let settingsDivider = Color(red: 228/255, green: 225/255, blue: 221/255) // #E4E1DD
+    static let settingsPrimaryText = Color(red: 25/255, green: 25/255, blue: 29/255) // #19191D
+    static let settingsSecondaryText = Color(red: 119/255, green: 119/255, blue: 131/255) // #777783
+    static let settingsSectionLabel = Color(red: 119/255, green: 119/255, blue: 131/255) // #777783
+    static let settingsDivider = Color(red: 234/255, green: 234/255, blue: 248/255) // #EAEAFA
+
+    // Hex Initializer
+    init(hex: String) {
+        let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: clean).scanHexInt64(&int)
+        let r, g, b: UInt64
+        switch clean.count {
+        case 6:
+            (r, g, b) = ((int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (255, 196, 61)
+        }
+        self.init(
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255
+        )
+    }
 }

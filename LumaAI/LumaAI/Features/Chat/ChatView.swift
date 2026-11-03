@@ -2,119 +2,157 @@ import SwiftUI
 
 public struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
+    @ObservedObject var userPreferences: UserPreferences
+    let currentUser: User?
     let onOpenHistory: () -> Void
     let onOpenVoice: () -> Void
     let onOpenSettings: () -> Void
 
     @State private var showingImageDetail: Bool = false
     @State private var showingTextScanner: Bool = false
+    private var externalScannerBinding: Binding<Bool>?
+
+    private var scannerBinding: Binding<Bool> {
+        externalScannerBinding ?? $showingTextScanner
+    }
 
     public init(
         viewModel: ChatViewModel,
+        userPreferences: UserPreferences = .shared,
+        currentUser: User? = nil,
+        isTextScannerPresented: Binding<Bool>? = nil,
         onOpenHistory: @escaping () -> Void,
         onOpenVoice: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
         self.viewModel = viewModel
+        self.userPreferences = userPreferences
+        self.currentUser = currentUser
+        self.externalScannerBinding = isTextScannerPresented
         self.onOpenHistory = onOpenHistory
         self.onOpenVoice = onOpenVoice
         self.onOpenSettings = onOpenSettings
     }
 
+    private var timeGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour < 12 {
+            return "Good Morning,"
+        } else if hour < 17 {
+            return "Good Afternoon,"
+        } else {
+            return "Good Evening,"
+        }
+    }
+
+    private var displayName: String {
+        if let custom = userPreferences.customDisplayName, !custom.trimmingCharacters(in: .whitespaces).isEmpty {
+            return custom.trimmingCharacters(in: .whitespaces)
+        }
+        if let user = currentUser, !user.fullName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return user.fullName.trimmingCharacters(in: .whitespaces)
+        }
+        return "Luma User"
+    }
+
     public var body: some View {
-        VStack(spacing: 0) {
-            // Top Navigation Bar
-            navigationHeader
+        ZStack {
+            // Orbix Studio Angled Soft Lavender Background
+            OrbixBackgroundView()
+                .ignoresSafeArea()
 
-            Divider()
+            VStack(spacing: 0) {
+                // Orbix Studio Navigation Header
+                orbixHeader
 
-            // Main Conversation Area
-            ScrollViewReader { proxy in
-                ZStack {
-                    // Tap-to-dismiss background
-                    Color.lumaCanvas
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            dismissKeyboard()
+                // Main Conversation & Empty State Area
+                ScrollViewReader { proxy in
+                    ZStack {
+                        // Dismiss keyboard tap target
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                dismissKeyboard()
+                            }
+
+                        if viewModel.conversation.messages.isEmpty {
+                            emptyOrbixChatGreeting
+                        } else {
+                            messageScrollView(proxy: proxy)
                         }
-
-                    if viewModel.conversation.messages.isEmpty {
-                        emptyChatGreeting
-                    } else {
-                        messageScrollView(proxy: proxy)
                     }
-                }
-                .onChange(of: viewModel.conversation.messages.count) { _ in
-                    scrollToBottom(proxy: proxy)
-                }
-                .onChange(of: viewModel.conversation.messages.last?.content) { _ in
-                    scrollToBottom(proxy: proxy, animated: false)
-                }
-                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    .onChange(of: viewModel.conversation.messages.count) { _ in
                         scrollToBottom(proxy: proxy)
                     }
-                }
-            }
-
-            // Error Banner if present
-            if let error = viewModel.errorMessage {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 13))
-                        .foregroundColor(.lumaError)
-                    Text(error)
-                        .font(LumaTypography.caption)
-                        .foregroundColor(.lumaError)
-                    Spacer()
-                    Button(action: { viewModel.errorMessage = nil }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11))
-                            .foregroundColor(.lumaSecondaryText)
+                    .onChange(of: viewModel.conversation.messages.last?.content) { _ in
+                        scrollToBottom(proxy: proxy, animated: false)
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            scrollToBottom(proxy: proxy)
+                        }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.lumaError.opacity(0.1))
-            }
 
-            // Bottom Composer
-            ComposerView(
-                text: $viewModel.inputText,
-                attachedImage: $viewModel.attachedImage,
-                isStreaming: viewModel.isStreaming,
-                isImageMode: viewModel.isImageMode,
-                isDictating: viewModel.isDictating,
-                speechAudioLevel: viewModel.speechAudioLevel,
-                onToggleImageMode: {
-                    withAnimation(.spring(response: 0.25)) {
-                        viewModel.isImageMode.toggle()
+                // Error Banner if present
+                if let error = viewModel.errorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.lumaError)
+                        Text(error)
+                            .font(LumaTypography.caption)
+                            .foregroundColor(Color.lumaError)
+                        Spacer()
+                        Button(action: { viewModel.errorMessage = nil }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11))
+                                .foregroundColor(Color.orbixSecondaryText)
+                        }
                     }
-                },
-                onScanText: {
-                    dismissKeyboard()
-                    showingTextScanner = true
-                },
-                onToggleVoice: {
-                    viewModel.toggleDictation()
-                },
-                onOpenVoiceMode: onOpenVoice,
-                onSend: {
-                    viewModel.sendMessage()
-                },
-                onStop: {
-                    viewModel.stopStreaming()
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.lumaError.opacity(0.1))
                 }
-            )
+
+                // Orbix Studio Composer Bar
+                ComposerView(
+                    text: $viewModel.inputText,
+                    attachedImage: $viewModel.attachedImage,
+                    isStreaming: viewModel.isStreaming,
+                    isImageMode: viewModel.isImageMode,
+                    isDictating: viewModel.isDictating,
+                    speechAudioLevel: viewModel.speechAudioLevel,
+                    onToggleImageMode: {
+                        withAnimation(.spring(response: 0.25)) {
+                            viewModel.isImageMode.toggle()
+                        }
+                    },
+                    onScanText: {
+                        dismissKeyboard()
+                        scannerBinding.wrappedValue = true
+                    },
+                    onToggleVoice: {
+                        viewModel.toggleDictation()
+                    },
+                    onOpenVoiceMode: onOpenVoice,
+                    onSend: {
+                        viewModel.sendMessage()
+                    },
+                    onStop: {
+                        viewModel.stopStreaming()
+                    }
+                )
+                .padding(.bottom, 6)
+            }
         }
-        .background(Color.lumaCanvas.ignoresSafeArea())
         .sheet(item: $viewModel.selectedImageAttachment) { attachment in
             ImageViewerView(attachment: attachment)
         }
-        .fullScreenCover(isPresented: $showingTextScanner) {
+        .fullScreenCover(isPresented: scannerBinding) {
             LiveTextScannerView(
                 onInsertText: { recognizedText in
-                    showingTextScanner = false
+                    scannerBinding.wrappedValue = false
                     DispatchQueue.main.async {
                         let text = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !text.isEmpty else { return }
@@ -126,108 +164,115 @@ public struct ChatView: View {
                     }
                 },
                 onDismiss: {
-                    showingTextScanner = false
+                    scannerBinding.wrappedValue = false
                 }
             )
         }
     }
 
-    private var navigationHeader: some View {
-        HStack(spacing: 12) {
+    // MARK: - Orbix Studio Navigation Header
+    private var orbixHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            // User Avatar (matching reference top-left circular portrait)
+            Button(action: {
+                HapticFeedback.light()
+                dismissKeyboard()
+                onOpenSettings()
+            }) {
+                UserProfileAvatarView(
+                    userPreferences: userPreferences,
+                    currentUser: currentUser,
+                    size: 42
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open profile and settings")
+
+            // User Name & Greeting (matching reference: Good Morning, Jhonathon Troot)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(timeGreeting)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(Color.orbixSecondaryText)
+
+                Text(displayName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color.orbixPrimaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // History / Drawer Button
             Button(action: {
                 HapticFeedback.light()
                 dismissKeyboard()
                 onOpenHistory()
             }) {
                 Image(systemName: "sidebar.left")
-                    .font(.system(size: 18))
-                    .foregroundColor(.lumaPrimaryText)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Color.orbixPrimaryText)
                     .frame(width: 38, height: 38)
-                    .background(Color.lumaSurfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.orbixCardBorder, lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.conversation.title)
-                    .font(LumaTypography.headline)
-                    .foregroundColor(.lumaPrimaryText)
-                    .lineLimit(1)
-
-                Text(viewModel.isStreaming ? "Responding…" : "Luma AI")
-                    .font(LumaTypography.caption)
-                    .foregroundColor(.lumaSecondaryText)
-            }
-
-            Spacer()
-
+            // New Conversation Button
             Button(action: {
                 HapticFeedback.light()
                 dismissKeyboard()
                 viewModel.startNewConversation()
             }) {
                 Image(systemName: "square.and.pencil")
-                    .font(.system(size: 17))
-                    .foregroundColor(.lumaPrimaryText)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(Color.orbixPrimaryText)
                     .frame(width: 38, height: 38)
-                    .background(Color.lumaSurfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-
-            Button(action: {
-                HapticFeedback.light()
-                dismissKeyboard()
-                onOpenSettings()
-            }) {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 16))
-                    .foregroundColor(.lumaSecondaryText)
-                    .frame(width: 38, height: 38)
-                    .background(Color.lumaSurfaceElevated)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Color.white)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.orbixCardBorder, lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color.lumaCanvas)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
     }
 
-    private var emptyChatGreeting: some View {
+    // MARK: - Orbix Studio Empty State
+    private var emptyOrbixChatGreeting: some View {
         GeometryReader { geometry in
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 24) {
-                    Spacer(minLength: 16)
+                VStack(spacing: 28) {
+                    Spacer(minLength: 40)
 
-                    Circle()
-                        .fill(Color.lumaSurfaceElevated)
-                        .frame(width: 64, height: 64)
-                        .overlay(
-                            Image(systemName: "sparkle")
-                                .font(.system(size: 28, weight: .light))
-                                .foregroundColor(.lumaPrimaryText)
-                        )
-
-                    VStack(spacing: 8) {
-                        Text("How can I help you think today?")
-                            .font(LumaTypography.title)
-                            .foregroundColor(.lumaPrimaryText)
+                    // Hero Text (Matching reference image: "Need anything?")
+                    VStack(spacing: 12) {
+                        Text("Need anything?")
+                            .font(.system(size: 34, weight: .bold))
+                            .foregroundColor(Color.orbixPrimaryText)
                             .multilineTextAlignment(.center)
 
-                        Text("Ask questions, explore complex topics, generate code, or create artwork.")
-                            .font(LumaTypography.subheadline)
-                            .foregroundColor(.lumaSecondaryText)
+                        Text("Our smart AI assistant helps you find exactly what you need—faster and easier than ever.")
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(Color.orbixSecondaryText)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
+                            .lineSpacing(4)
+                            .padding(.horizontal, 32)
                     }
 
-                    // Quick Starter Suggestions
-                    VStack(spacing: 10) {
-                        promptStarter("Explain quantum computing in simple terms")
-                        promptStarter("Write a Swift function to debounce network calls")
-                        promptStarter("Generate an image of a serene mountain lake at dawn")
+                    // Prompt Suggestion Chips (Matching reference layout below search bar)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            promptChip(icon: "gift", title: "Best gift ideas", query: "Give me creative gift ideas for a loved one")
+                            promptChip(icon: "sparkles", title: "Creative brainstorm", query: "Brainstorm 5 innovative startup concepts in AI")
+                            promptChip(icon: "curlybraces", title: "Swift architecture", query: "How do I build a scalable SwiftUI architecture?")
+                            promptChip(icon: "figure.run", title: "Fitness plan", query: "Design a high-energy 30-minute daily workout routine")
+                        }
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
 
-                    Spacer(minLength: 16)
+                    Spacer(minLength: 40)
                 }
                 .frame(minHeight: geometry.size.height)
             }
@@ -240,37 +285,37 @@ public struct ChatView: View {
         }
     }
 
-    private func promptStarter(_ prompt: String) -> some View {
+    private func promptChip(icon: String, title: String, query: String) -> some View {
         Button(action: {
             HapticFeedback.light()
             dismissKeyboard()
-            viewModel.inputText = prompt
+            viewModel.inputText = query
             viewModel.sendMessage()
         }) {
-            HStack {
-                Text(prompt)
-                    .font(LumaTypography.subheadline)
-                    .foregroundColor(.lumaPrimaryText)
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(.lumaTertiaryText)
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color.orbixSecondaryText)
+                Text(title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(Color.orbixPrimaryText)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.lumaSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.white)
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.lumaBorder, lineWidth: 1)
+                Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
             )
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }
 
+    // MARK: - Message List
     private func messageScrollView(proxy: ScrollViewProxy) -> some View {
         ScrollView(.vertical) {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 14) {
                 ForEach(viewModel.conversation.messages) { message in
                     MessageBubbleView(message: message) { attachment in
                         viewModel.selectedImageAttachment = attachment
@@ -279,7 +324,8 @@ public struct ChatView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
         .scrollDismissesKeyboard(.immediately)
         .simultaneousGesture(

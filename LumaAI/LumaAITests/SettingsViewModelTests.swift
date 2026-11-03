@@ -82,3 +82,4 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertNil(authManager.currentUser)
     }
 }
+

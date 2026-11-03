@@ -30,6 +30,16 @@
 				<string>com.googleusercontent.apps.172474086048-ke3r4ekgdm0vcak48j1bvqqb6msrmubh</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.nibrassoftsolutions.LumaAI.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>luma</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>

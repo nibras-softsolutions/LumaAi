@@ -34,6 +34,7 @@ public final class AuthenticationManager: ObservableObject {
             self.currentUser = user
             self.isAuthenticated = true
             cacheUser(user)
+            UserPreferences.shared.syncWithServerUser(user, client: apiClient)
         } catch {
             if case .offline = (error as? NetworkError), let cached = getCachedUser() {
                 self.currentUser = cached
@@ -118,6 +119,7 @@ public final class AuthenticationManager: ObservableObject {
             self.currentUser = user
             self.isAuthenticated = true
             cacheUser(user)
+            UserPreferences.shared.syncWithServerUser(user, client: apiClient)
         } catch let err as NetworkError {
             authErrorMessage = err.errorDescription
             throw err
@@ -135,6 +137,7 @@ public final class AuthenticationManager: ObservableObject {
             self.currentUser = user
             self.isAuthenticated = true
             cacheUser(user)
+            UserPreferences.shared.syncWithServerUser(user, client: apiClient)
         } catch let err as NetworkError {
             authErrorMessage = err.errorDescription
             throw err
@@ -152,6 +155,7 @@ public final class AuthenticationManager: ObservableObject {
             self.currentUser = user
             self.isAuthenticated = true
             cacheUser(user)
+            UserPreferences.shared.syncWithServerUser(user, client: apiClient)
         } catch let err as NetworkError {
             authErrorMessage = err.errorDescription
             throw err
@@ -181,6 +185,7 @@ public final class AuthenticationManager: ObservableObject {
         _ = try? await apiClient.request(.logout, body: nil) as ServerHealth
         GIDSignIn.sharedInstance.signOut()
         clearStoredSession()
+        UserPreferences.shared.resetProfileCustomization()
         self.currentUser = nil
         self.isAuthenticated = false
         self.isRestoringSession = false

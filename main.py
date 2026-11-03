@@ -35,6 +35,7 @@ from auth import (
     initialize_database,
     require_user,
     router as auth_router,
+    user_router,
 )
 from tools import (
     ASPECT_RATIOS,
@@ -202,6 +203,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(user_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 
@@ -241,7 +243,7 @@ ALLOWED_MARKDOWN_TAGS = {
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "system"]
     content: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
 
     @model_validator(mode="after")
@@ -275,12 +277,15 @@ class MarkdownRequest(BaseModel):
 
 
 def _to_langchain_messages(messages: list[ChatMessage]) -> list[BaseMessage]:
-    return [
-        HumanMessage(content=message.content)
-        if message.role == "user"
-        else AIMessage(content=message.content)
-        for message in messages
-    ]
+    result: list[BaseMessage] = []
+    for message in messages:
+        if message.role == "user":
+            result.append(HumanMessage(content=message.content))
+        elif message.role == "system":
+            result.append(SystemMessage(content=message.content))
+        else:
+            result.append(AIMessage(content=message.content))
+    return result
 
 
 def _requests_downloadable_code(prompt: str) -> bool:
@@ -707,6 +712,61 @@ async def render_markdown(
         strip=True,
     )
     return {"html": sanitized}
+
+
+class OCRRequest(BaseModel):
+    image: str
+
+
+@app.post("/api/tools/ocr")
+async def extract_text_from_image(
+    payload: OCRRequest,
+    _user: User = Depends(require_user),
+) -> dict[str, str]:
+    raw_data = payload.image.strip()
+    if not raw_data:
+        raise HTTPException(status_code=400, detail="Image data is required.")
+    if "," in raw_data:
+        raw_data = raw_data.split(",", 1)[1]
+    try:
+        import base64
+        image_bytes = base64.b64decode(raw_data)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+
+    vision_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or HOSTED_API_KEY
+    vision_base = os.getenv("OPENAI_BASE_URL") or (
+        "https://api.groq.com/openai/v1" if os.getenv("GROQ_API_KEY") else "https://api.openai.com/v1"
+    )
+    model = "llama-3.2-11b-vision-preview" if "groq" in vision_base else "gpt-4o-mini"
+
+    if vision_key:
+        try:
+            b64_img = base64.b64encode(image_bytes).decode("ascii")
+            headers = {"Authorization": f"Bearer {vision_key}", "Content-Type": "application/json"}
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract all readable text, headlines, labels, and content from this image. Output only the extracted text plainly. If no text is found, output: [No readable text found]."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                    ]
+                }
+            ]
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                res = await client.post(
+                    f"{vision_base.rstrip('/')}/chat/completions",
+                    headers=headers,
+                    json={"model": model, "messages": messages, "max_tokens": 1000},
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    extracted = data["choices"][0]["message"]["content"].strip()
+                    return {"text": extracted}
+        except Exception as exc:
+            logger.warning("Vision OCR failed: %s", exc)
+
+    return {"text": "Scanned document text: (No cloud vision provider configured or image is unreadable)"}
 
 
 @app.exception_handler(RequestValidationError)
