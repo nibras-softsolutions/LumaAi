@@ -326,18 +326,24 @@ async def initialize_database() -> None:
             table_names = inspector.get_table_names()
             if "users" in table_names:
                 cols = {col["name"] for col in inspector.get_columns("users")}
+                is_pg = sync_conn.dialect.name == "postgresql"
+                ts_type = "TIMESTAMP WITH TIME ZONE" if is_pg else "DATETIME"
                 to_add = [
                     ("profile_image_url", "VARCHAR(512)"),
                     ("custom_name", "VARCHAR(100)"),
                     ("bio", "VARCHAR(250)"),
                     ("avatar_emoji", "VARCHAR(32)"),
                     ("avatar_color_hex", "VARCHAR(16)"),
-                    ("updated_at", "DATETIME"),
+                    ("updated_at", ts_type),
                 ]
                 for col_name, col_type in to_add:
                     if col_name not in cols:
                         try:
-                            sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                            with sync_conn.begin_nested():
+                                if is_pg:
+                                    sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_name} {col_type}"))
+                                else:
+                                    sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
                         except Exception:
                             pass
         await connection.run_sync(_migrate)
