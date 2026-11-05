@@ -1191,7 +1191,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(upload_res.status_code, 200)
         user_with_avatar = upload_res.json()
         self.assertIsNotNone(user_with_avatar["profile_image_url"])
-        self.assertTrue(user_with_avatar["profile_image_url"].startswith("/static/avatars/"))
+        self.assertTrue(user_with_avatar["profile_image_url"].startswith("/api/user/profile/avatar/"))
 
         # Verify photo exists and can be fetched
         photo_res = await self.client.get(user_with_avatar["profile_image_url"])
@@ -1469,6 +1469,306 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"RENDER": "true", "COOKIE_SECURE": "false"}):
             self.assertTrue(auth.is_production_environment())
             self.assertTrue(auth.is_cookie_secure())
+
+    async def test_chat_stream_success(self):
+        """Chat stream yields SSE tokens and trailing done event."""
+        email = f"chat_stream_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Stream User", "email": email, "password": "Password123!"},
+        )
+        with patch.object(main, "llm", StubModel(chunks=["Hello", " world!"])):
+            res = await self.client.post(
+                "/api/chat/stream",
+                json={"messages": [{"role": "user", "content": "Hi there"}]},
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("text/event-stream", res.headers.get("content-type", ""))
+            body = res.text
+            self.assertIn("event: token", body)
+            self.assertIn("Hello", body)
+            self.assertIn("event: done", body)
+            self.assertNotIn("event: error", body)
+
+    async def test_chat_stream_validation_422_structured(self):
+        """Invalid chat payloads return HTTP 422 with structured field details and validation rules."""
+        email = f"val_test_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Validation User", "email": email, "password": "Password123!"},
+        )
+
+        # 1. Blank/whitespace content
+        res = await self.client.post(
+            "/api/chat/stream",
+            json={"messages": [{"role": "user", "content": "   "}]},
+        )
+        self.assertEqual(res.status_code, 422)
+        body = res.json()
+        self.assertIn("errors", body)
+        self.assertIn("validation_rules", body)
+        self.assertTrue(any("blank" in err["message"].lower() for err in body["errors"]))
+
+        # 2. Empty messages list
+        res2 = await self.client.post(
+            "/api/chat/stream",
+            json={"messages": []},
+        )
+        self.assertEqual(res2.status_code, 422)
+        body2 = res2.json()
+        self.assertTrue(len(body2["errors"]) > 0)
+        self.assertIn("messages", body2["validation_rules"])
+
+        # 3. Latest message not from user
+        res3 = await self.client.post(
+            "/api/chat/stream",
+            json={"messages": [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi there"}
+            ]},
+        )
+        self.assertEqual(res3.status_code, 422)
+        body3 = res3.json()
+        self.assertTrue(any("user" in err["message"].lower() for err in body3["errors"]))
+
+    async def test_groq_429_retry_success(self):
+        """Groq 429 response is retried with backoff and Retry-After delay, then completes."""
+        model = main.OpenAICompatibleModel(
+            model="llama-3.3-70b-versatile",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="mock_key",
+            max_retries=2,
+            initial_retry_delay=0.01,
+            max_retry_delay=0.1,
+        )
+
+        calls = 0
+
+        class MockStreamResponse:
+            def __init__(self, status_code, headers, lines):
+                self.status_code = status_code
+                self.headers = headers
+                self.lines = lines
+
+            async def aread(self):
+                return b'{"error": {"message": "Rate limit reached. Please try again in 0.05s."}}'
+
+            async def aiter_lines(self):
+                for l in self.lines:
+                    yield l
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        class MockAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def stream(self, method, url, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return MockStreamResponse(
+                        429,
+                        {"retry-after": "0.02"},
+                        [],
+                    )
+                else:
+                    return MockStreamResponse(
+                        200,
+                        {},
+                        ['data: {"choices":[{"delta":{"content":"Success after 429"}}]}', 'data: [DONE]'],
+                    )
+
+        with patch("httpx.AsyncClient", MockAsyncClient):
+            chunks = []
+            async for chunk in model.astream([HumanMessage(content="Hello")]):
+                chunks.append(chunk.content)
+            self.assertEqual("".join(chunks), "Success after 429")
+            self.assertEqual(calls, 2)
+
+    async def test_groq_429_retries_exhausted_emits_sse_error(self):
+        """When 429 retries are exhausted, raises ProviderRateLimitError and stream_response emits SSE error without done."""
+        model = main.OpenAICompatibleModel(
+            model="llama-3.3-70b-versatile",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="mock_key",
+            max_retries=1,
+            initial_retry_delay=0.01,
+            max_retry_delay=0.05,
+        )
+
+        class MockAlways429:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            def stream(self, method, url, **kwargs):
+                class Resp:
+                    status_code = 429
+                    headers = {"retry-after": "0.01"}
+                    async def aread(self):
+                        return b'{"error": {"message": "Rate limit exceeded."}}'
+                    async def aiter_lines(self):
+                        if False: yield ""
+                    async def __aenter__(self): return self
+                    async def __aexit__(self, *args): pass
+                return Resp()
+
+        with patch("httpx.AsyncClient", MockAlways429):
+            with patch.object(main, "llm", model):
+                events = []
+                async for event_str in main.stream_response([HumanMessage(content="Hello")]):
+                    events.append(event_str)
+
+                combined = "".join(events)
+                self.assertIn("event: error", combined)
+                self.assertIn("high demand", combined)
+                self.assertNotIn("event: done", combined)
+
+    async def test_concurrency_control(self):
+        """Concurrency control bounds simultaneous AI generation and rejects or times out excess requests."""
+        model = main.OpenAICompatibleModel(
+            model="test-model",
+            base_url="https://api.example.com",
+            api_key="key",
+            max_concurrency=1,
+            concurrency_timeout=0.1,
+        )
+
+        # Acquire the single permit
+        await model.concurrency_limiter.acquire()
+        try:
+            with self.assertRaises(main.ProviderConcurrencyError):
+                async for _ in model.astream([HumanMessage(content="Hello")]):
+                    pass
+        finally:
+            model.concurrency_limiter.release()
+
+    async def test_client_disconnect_during_stream(self):
+        """When client disconnects and generator is closed, no RuntimeError: aclose() is raised and cleanup finishes."""
+        class SlowModel:
+            async def astream(self, messages):
+                for i in range(100):
+                    await asyncio.sleep(0.05)
+                    yield AIMessageChunk(content=f"token_{i} ")
+
+        with patch.object(main, "llm", SlowModel()):
+            gen = main.stream_response([HumanMessage(content="Start")])
+            # Consume 1 token
+            first_chunk = await anext(gen)
+            self.assertIn("token", first_chunk)
+
+            # Simulate client disconnect by closing generator mid-stream
+            await gen.aclose()
+            # If no RuntimeError: aclose() occurred, test passes cleanly
+
+    async def test_profile_photo_saved_directly_in_database(self):
+        """Profile photo is stored directly in PostgreSQL database and served via avatar endpoint."""
+        email = f"db_avatar_{secrets.token_hex(4)}@example.com"
+        reg = await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "DB Avatar User", "email": email, "password": "Password123!"},
+        )
+        self.assertEqual(reg.status_code, 201)
+        user_id = reg.json()["id"]
+
+        tiny_png = (
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        upload_res = await self.client.post(
+            "/api/user/profile/photo",
+            json={"image": tiny_png},
+        )
+        self.assertEqual(upload_res.status_code, 200)
+
+        # Verify directly in the database
+        async with auth.SessionFactory.begin() as db:
+            db_user = await db.get(auth.User, user_id)
+            self.assertIsNotNone(db_user.profile_image_data)
+            self.assertTrue(len(db_user.profile_image_data) > 20)
+            self.assertEqual(db_user.profile_image_url, f"/api/user/profile/avatar/{user_id}")
+
+        # Verify avatar endpoint streams image from database
+        avatar_res = await self.client.get(f"/api/user/profile/avatar/{user_id}")
+        self.assertEqual(avatar_res.status_code, 200)
+        self.assertEqual(avatar_res.headers.get("content-type"), "image/jpeg")
+        self.assertTrue(len(avatar_res.content) > 20)
+
+    async def test_chat_conversations_saved_directly_in_database(self):
+        """Conversations and messages are saved and synchronized directly in PostgreSQL."""
+        email = f"db_chat_{secrets.token_hex(4)}@example.com"
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Chat DB User", "email": email, "password": "Password123!"},
+        )
+
+        conv_id = secrets.token_hex(8)
+        save_res = await self.client.post(
+            "/api/chat/conversations",
+            json={
+                "id": conv_id,
+                "title": "Quantum Physics Exploration",
+                "messages": [
+                    {"role": "user", "content": "Explain entanglement"},
+                    {"role": "assistant", "content": "Entanglement is a quantum phenomenon..."},
+                ],
+            },
+        )
+        self.assertEqual(save_res.status_code, 200)
+
+        # Check PostgreSQL tables directly
+        async with auth.SessionFactory.begin() as db:
+            conv = await db.get(auth.ConversationModel, conv_id)
+            self.assertIsNotNone(conv)
+            self.assertEqual(conv.title, "Quantum Physics Exploration")
+
+            msgs = (await db.scalars(
+                auth.select(auth.ChatMessageModel).where(auth.ChatMessageModel.conversation_id == conv_id)
+            )).all()
+            self.assertEqual(len(msgs), 2)
+            self.assertEqual(msgs[0].role, "user")
+            self.assertEqual(msgs[0].content, "Explain entanglement")
+
+        # Fetch via API
+        list_res = await self.client.get("/api/chat/conversations")
+        self.assertEqual(list_res.status_code, 200)
+        convs = list_res.json()
+        self.assertTrue(any(c["id"] == conv_id for c in convs))
+        found = next(c for c in convs if c["id"] == conv_id)
+        self.assertEqual(len(found["messages"]), 2)
+
+        # Sync API
+        sync_res = await self.client.post(
+            "/api/chat/sync",
+            json={"conversations": [{"id": secrets.token_hex(8), "title": "Second Chat", "messages": []}]},
+        )
+        self.assertEqual(sync_res.status_code, 200)
+        self.assertEqual(len(sync_res.json()), 2)
+
+        # Delete conversation
+        del_res = await self.client.delete(f"/api/chat/conversations/{conv_id}")
+        self.assertEqual(del_res.status_code, 200)
+
+        # Clear all
+        clear_res = await self.client.delete("/api/chat/conversations")
+        self.assertEqual(clear_res.status_code, 200)
+        final_list = await self.client.get("/api/chat/conversations")
+        self.assertEqual(len(final_list.json()), 0)
 
 
 if __name__ == "__main__":

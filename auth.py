@@ -22,7 +22,7 @@ load_dotenv()
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pwdlib import PasswordHash
-from sqlalchemy import DateTime, ForeignKey, Integer, String, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -210,12 +210,48 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     profile_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    profile_image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
     custom_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(250), nullable=True)
     avatar_emoji: Mapped[str | None] = mapped_column(String(32), nullable=True)
     avatar_color_hex: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ConversationModel(Base):
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="New Conversation")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
+class ChatMessageModel(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("chat_conversations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="complete")
+    image_attachment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
 
 class CustomCharacterModel(Base):
@@ -434,6 +470,7 @@ async def initialize_database() -> None:
                 ts_type = "TIMESTAMP WITH TIME ZONE" if is_pg else "DATETIME"
                 to_add = [
                     ("profile_image_url", "VARCHAR(512)"),
+                    ("profile_image_data", "TEXT"),
                     ("custom_name", "VARCHAR(100)"),
                     ("bio", "VARCHAR(250)"),
                     ("avatar_emoji", "VARCHAR(32)"),
@@ -769,10 +806,49 @@ async def update_user_profile(
         if data.avatar_color_hex is not None:
             db_user.avatar_color_hex = data.avatar_color_hex.strip() if data.avatar_color_hex.strip() else None
         if data.profile_image_url is not None:
-            db_user.profile_image_url = data.profile_image_url.strip() if data.profile_image_url.strip() else None
+            clean_url = data.profile_image_url.strip()
+            if clean_url.startswith("data:image/"):
+                db_user.profile_image_data = clean_url
+                db_user.profile_image_url = f"/api/user/profile/avatar/{user.id}"
+            else:
+                db_user.profile_image_url = clean_url if clean_url else None
         db_user.updated_at = _utcnow()
         await db.flush()
         return db_user
+
+
+@router.get("/avatar/{user_id}", include_in_schema=False)
+@user_router.get("/profile/avatar/{user_id}", include_in_schema=False)
+@user_router.get("/avatar/{user_id}", include_in_schema=False)
+async def get_user_avatar(user_id: str) -> Response:
+    async with SessionFactory.begin() as db:
+        user = await db.get(User, user_id)
+        if not user or not user.profile_image_data:
+            # Fallback to local file if available
+            for f in AVATARS_DIR.glob(f"avatar_{user_id}_*"):
+                try:
+                    data = f.read_bytes()
+                    return Response(content=data, media_type="image/jpeg")
+                except Exception:
+                    pass
+            raise HTTPException(status_code=404, detail="Avatar not found.")
+
+        raw_b64 = user.profile_image_data.strip()
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        try:
+            image_bytes = base64.b64decode(raw_b64)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Corrupted avatar data.")
+
+        return Response(
+            content=image_bytes,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=86400",
+                "ETag": f'"{hashlib.md5(image_bytes).hexdigest()}"',
+            },
+        )
 
 
 @router.post("/profile/photo", response_model=UserResponse)
@@ -809,24 +885,30 @@ async def upload_profile_photo(
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Unsupported or corrupted image file.") from exc
 
-    for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
-        try:
-            old_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+    # Encode directly to JPEG bytes and store base64 in PostgreSQL
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=85, optimize=True)
+    jpeg_bytes = buffer.getvalue()
+    b64_stored = base64.b64encode(jpeg_bytes).decode("ascii")
 
-    filename = f"avatar_{user.id}_{int(datetime.now(timezone.utc).timestamp())}_{secrets.token_hex(4)}.jpg"
-    dest_path = AVATARS_DIR / filename
+    profile_url = f"/api/user/profile/avatar/{user.id}"
+
+    # Also keep a local cache file if folder is writable
     try:
-        img.save(dest_path, format="JPEG", quality=88, optimize=True)
+        AVATARS_DIR.mkdir(parents=True, exist_ok=True)
+        filename = f"avatar_{user.id}_{int(datetime.now(timezone.utc).timestamp())}_{secrets.token_hex(4)}.jpg"
+        for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
+            old_file.unlink(missing_ok=True)
+        dest_path = AVATARS_DIR / filename
+        dest_path.write_bytes(jpeg_bytes)
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to save avatar image.")
+        pass
 
-    profile_url = f"/static/avatars/{filename}"
     async with SessionFactory.begin() as db:
         db_user = await db.get(User, user.id)
         if db_user is None:
             raise HTTPException(status_code=404, detail="User not found.")
+        db_user.profile_image_data = b64_stored
         db_user.profile_image_url = profile_url
         db_user.updated_at = _utcnow()
         await db.flush()
@@ -846,7 +928,19 @@ async def delete_profile_photo(user: User = Depends(require_user)) -> User:
         db_user = await db.get(User, user.id)
         if db_user is None:
             raise HTTPException(status_code=404, detail="User not found.")
+        db_user.profile_image_data = None
         db_user.profile_image_url = None
+        db_user.profile_image_data = None
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        return db_user
+
+    async with SessionFactory.begin() as db:
+        db_user = await db.get(User, user.id)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        db_user.profile_image_url = None
+        db_user.profile_image_data = None
         db_user.updated_at = _utcnow()
         await db.flush()
         return db_user
@@ -870,6 +964,7 @@ async def reset_profile(user: User = Depends(require_user)) -> User:
         db_user.avatar_emoji = None
         db_user.avatar_color_hex = None
         db_user.profile_image_url = None
+        db_user.profile_image_data = None
         db_user.updated_at = _utcnow()
         await db.flush()
         return db_user
@@ -947,3 +1042,192 @@ async def delete_custom_character(
         if char and char.user_id == user.id:
             await db.delete(char)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------
+# Chat Conversation & Message Persistence Router
+# ---------------------------------------------------------
+chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+@chat_router.get("/conversations")
+async def list_conversations(user: User = Depends(require_user)) -> list[dict]:
+    """Retrieve all conversations and their full message history for the authenticated user from the database."""
+    async with SessionFactory.begin() as db:
+        stmt = (
+            select(ConversationModel)
+            .where(ConversationModel.user_id == user.id)
+            .order_by(ConversationModel.updated_at.desc())
+        )
+        convs = (await db.scalars(stmt)).all()
+        result = []
+        for conv in convs:
+            msg_stmt = (
+                select(ChatMessageModel)
+                .where(ChatMessageModel.conversation_id == conv.id)
+                .order_by(ChatMessageModel.created_at.asc())
+            )
+            msgs = (await db.scalars(msg_stmt)).all()
+            messages_list = []
+            for m in msgs:
+                img = None
+                if m.image_attachment:
+                    try:
+                        img = json.loads(m.image_attachment)
+                    except Exception:
+                        pass
+                messages_list.append({
+                    "id": m.id,
+                    "role": m.role,
+                    "content": m.content,
+                    "status": m.status,
+                    "imageAttachment": img,
+                    "createdAt": m.created_at.isoformat(),
+                })
+            result.append({
+                "id": conv.id,
+                "title": conv.title,
+                "messages": messages_list,
+                "createdAt": conv.created_at.isoformat(),
+                "updatedAt": conv.updated_at.isoformat(),
+            })
+        return result
+
+
+@chat_router.post("/conversations")
+async def save_conversation(payload: dict, user: User = Depends(require_user)) -> dict:
+    """Save or update a conversation and its messages directly in the database."""
+    conv_id = str(payload.get("id") or uuid4())
+    title = (payload.get("title") or "New Conversation")[:255]
+    messages_data = payload.get("messages", [])
+    now = _utcnow()
+
+    c_str = payload.get("created_at") or payload.get("createdAt")
+    u_str = payload.get("updated_at") or payload.get("updatedAt")
+    try:
+        conv_created = datetime.fromisoformat(str(c_str).replace("Z", "+00:00")).replace(tzinfo=None) if c_str else now
+    except Exception:
+        conv_created = now
+
+    try:
+        conv_updated = datetime.fromisoformat(str(u_str).replace("Z", "+00:00")).replace(tzinfo=None) if u_str else now
+    except Exception:
+        conv_updated = now
+
+    async with SessionFactory.begin() as db:
+        conv = await db.get(ConversationModel, conv_id)
+        if not conv:
+            conv = ConversationModel(
+                id=conv_id,
+                user_id=user.id,
+                title=title,
+                created_at=conv_created,
+                updated_at=conv_updated,
+            )
+            db.add(conv)
+        else:
+            if conv.user_id != user.id:
+                raise HTTPException(status_code=403, detail="Not authorized to edit this conversation.")
+            conv.title = title
+            conv.updated_at = conv_updated
+
+        # Delete existing messages and re-insert for idempotent sync
+        await db.execute(delete(ChatMessageModel).where(ChatMessageModel.conversation_id == conv_id))
+
+        for m in messages_data:
+            msg_id = str(m.get("id") or uuid4())
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            status_val = m.get("status", "complete")
+            img_att = m.get("imageAttachment") or m.get("image_attachment")
+            img_str = json.dumps(img_att) if img_att else None
+            m_time = m.get("createdAt") or m.get("created_at")
+            try:
+                msg_dt = datetime.fromisoformat(str(m_time).replace("Z", "+00:00")).replace(tzinfo=None) if m_time else now
+            except Exception:
+                msg_dt = now
+
+            db_msg = ChatMessageModel(
+                id=msg_id,
+                conversation_id=conv_id,
+                user_id=user.id,
+                role=role,
+                content=content,
+                status=status_val,
+                image_attachment=img_str,
+                created_at=msg_dt,
+            )
+            db.add(db_msg)
+        await db.flush()
+
+    return {"status": "saved", "id": conv_id, "title": title}
+
+
+@chat_router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str, user: User = Depends(require_user)) -> dict:
+    """Retrieve a single conversation and its messages from the database."""
+    async with SessionFactory.begin() as db:
+        conv = await db.get(ConversationModel, conversation_id)
+        if not conv or conv.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        msg_stmt = (
+            select(ChatMessageModel)
+            .where(ChatMessageModel.conversation_id == conv.id)
+            .order_by(ChatMessageModel.created_at.asc())
+        )
+        msgs = (await db.scalars(msg_stmt)).all()
+        messages_list = []
+        for m in msgs:
+            img = None
+            if m.image_attachment:
+                try:
+                    img = json.loads(m.image_attachment)
+                except Exception:
+                    pass
+            messages_list.append({
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "status": m.status,
+                "imageAttachment": img,
+                "createdAt": m.created_at.isoformat(),
+            })
+        return {
+            "id": conv.id,
+            "title": conv.title,
+            "messages": messages_list,
+            "createdAt": conv.created_at.isoformat(),
+            "updatedAt": conv.updated_at.isoformat(),
+        }
+
+
+@chat_router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, user: User = Depends(require_user)) -> dict:
+    """Delete a conversation from the database."""
+    async with SessionFactory.begin() as db:
+        conv = await db.get(ConversationModel, conversation_id)
+        if conv and conv.user_id == user.id:
+            await db.delete(conv)
+            await db.flush()
+    return {"status": "deleted", "id": conversation_id}
+
+
+@chat_router.delete("/conversations")
+async def clear_all_conversations(user: User = Depends(require_user)) -> dict:
+    """Clear all conversations for the user from the database."""
+    async with SessionFactory.begin() as db:
+        await db.execute(delete(ConversationModel).where(ConversationModel.user_id == user.id))
+        await db.flush()
+    return {"status": "cleared"}
+
+
+@chat_router.post("/sync")
+async def sync_conversations_endpoint(payload: dict, user: User = Depends(require_user)) -> list[dict]:
+    """Sync conversations between client and database, returning the up-to-date conversation list."""
+    incoming = payload.get("conversations", [])
+    for c in incoming:
+        try:
+            await save_conversation(c, user=user)
+        except Exception:
+            pass
+    return await list_conversations(user=user)

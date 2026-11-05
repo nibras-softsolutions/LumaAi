@@ -32,6 +32,14 @@ public final class HistoryViewModel: ObservableObject {
 
     public func loadConversations() {
         self.conversations = conversationStore.loadConversations(for: userId)
+        Task {
+            if let remote = try? await APIClient.shared.fetchConversations(), !remote.isEmpty {
+                await MainActor.run {
+                    self.conversations = remote
+                    self.conversationStore.saveConversations(remote, for: self.userId)
+                }
+            }
+        }
     }
 
     public func deleteConversation(at offsets: IndexSet) {
@@ -40,15 +48,28 @@ public final class HistoryViewModel: ObservableObject {
             itemsToDelete.contains(where: { $0.id == item.id })
         }
         conversationStore.saveConversations(conversations, for: userId)
+        for item in itemsToDelete {
+            let id = item.id
+            Task {
+                try? await APIClient.shared.deleteConversation(id: id)
+            }
+        }
     }
 
     public func deleteConversation(_ conversation: Conversation) {
         conversations.removeAll { $0.id == conversation.id }
         conversationStore.saveConversations(conversations, for: userId)
+        let id = conversation.id
+        Task {
+            try? await APIClient.shared.deleteConversation(id: id)
+        }
     }
 
     public func clearAll() {
         conversations.removeAll()
         conversationStore.deleteConversations(for: userId)
+        Task {
+            try? await APIClient.shared.clearAllConversations()
+        }
     }
 }

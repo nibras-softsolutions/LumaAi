@@ -364,6 +364,14 @@ public struct AppSidebarView: View {
 
     private func loadRecentConversations() {
         self.conversations = conversationStore.loadConversations(for: userId)
+        Task {
+            if let remote = try? await APIClient.shared.fetchConversations(), !remote.isEmpty {
+                await MainActor.run {
+                    self.conversations = remote
+                    self.conversationStore.saveConversations(remote, for: self.userId)
+                }
+            }
+        }
     }
 
     private func deleteConversation(_ conv: Conversation) {
@@ -371,6 +379,10 @@ public struct AppSidebarView: View {
         conversationStore.saveConversations(conversations, for: userId)
         if chatViewModel.conversation.id == conv.id {
             chatViewModel.startNewConversation()
+        }
+        let id = conv.id
+        Task {
+            try? await APIClient.shared.deleteConversation(id: id)
         }
     }
 

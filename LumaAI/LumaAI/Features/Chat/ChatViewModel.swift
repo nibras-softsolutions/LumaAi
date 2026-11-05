@@ -324,5 +324,9 @@ public final class ChatViewModel: ObservableObject {
             all.insert(conversation, at: 0)
         }
         conversationStore.saveConversations(all, for: userId)
+        let toSave = conversation
+        Task {
+            try? await apiClient.saveConversation(toSave)
+        }
     }
 }

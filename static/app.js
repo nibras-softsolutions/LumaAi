@@ -168,6 +168,61 @@ function makeConversation() {
   return { id: makeId(), title: "New conversation", createdAt: now, updatedAt: now, messages: [] };
 }
 
+let remoteSaveTimeout;
+function saveConversationToServer(chat) {
+  if (!authenticatedUser || !chat || !chat.messages || chat.messages.length === 0) return;
+  window.clearTimeout(remoteSaveTimeout);
+  remoteSaveTimeout = window.setTimeout(async () => {
+    try {
+      await apiFetch("/api/chat/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chat),
+      });
+    } catch (err) {
+      console.warn("Failed to save conversation to database:", err);
+    }
+  }, 400);
+}
+
+async function syncConversationsWithServer() {
+  if (!authenticatedUser) return;
+  try {
+    const res = await apiFetch("/api/chat/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversations }),
+    });
+    if (res.ok) {
+      const serverConvs = await res.json();
+      if (Array.isArray(serverConvs) && serverConvs.length > 0) {
+        conversations = serverConvs.map((item) => ({
+          id: item.id,
+          title: item.title || "New conversation",
+          createdAt: item.createdAt ? new Date(item.createdAt).getTime() : Date.now(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+          messages: (item.messages || []).map((m) => ({
+            id: m.id || makeId(),
+            role: m.role,
+            content: m.content || "",
+            status: m.status || "complete",
+            image: m.imageAttachment || null,
+            createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
+          })),
+        }));
+        window.localStorage.setItem(accountStorageKey(CHAT_STORAGE_KEY), JSON.stringify(conversations));
+        if (!conversations.some((c) => c.id === currentConversation.id)) {
+          currentConversation = conversations[0] || makeConversation();
+        }
+        renderHistory();
+        renderConversation();
+      }
+    }
+  } catch (err) {
+    console.warn("Could not sync conversations with backend:", err);
+  }
+}
+
 function persist() {
   if (!authenticatedUser) return false;
   window.clearTimeout(saveTimeout);
@@ -179,6 +234,7 @@ function persist() {
     window.localStorage.setItem(accountStorageKey(CHAT_STORAGE_KEY), JSON.stringify(conversations));
     window.localStorage.setItem(accountStorageKey(CURRENT_CHAT_KEY), currentConversation.id);
     renderHistory();
+    saveConversationToServer(currentChat());
     return true;
   } catch {
     showToast("Could not save conversations in this browser. Check available storage.");
@@ -1380,6 +1436,7 @@ function showChat(user, pushHistory = false) {
     findConversation(readStorage(accountStorageKey(CURRENT_CHAT_KEY))) ?? makeConversation();
   updateUserProfileUI();
   loadCustomCharacters();
+  syncConversationsWithServer();
   const profileEl = document.querySelector("#profileName");
   if (profileEl) profileEl.textContent = getUserDisplayName();
   shell.hidden = false;
@@ -1690,6 +1747,7 @@ function openSettings() {
   closeMenus();
   updateUserProfileUI();
   loadCustomCharacters();
+  syncConversationsWithServer();
   settingsDialog.showModal();
 }
 
@@ -1728,6 +1786,7 @@ historyList.addEventListener("click", (event) => {
     if (currentConversation.id === chat.id) currentConversation = makeConversation();
     persist();
     renderConversation();
+    apiFetch(`/api/chat/conversations/${encodeURIComponent(chat.id)}`, { method: "DELETE" }).catch(() => {});
     return;
   }
   if (chat) {
@@ -1835,6 +1894,7 @@ document.querySelector("#clearHistoryButton").addEventListener("click", () => {
   currentConversation = makeConversation();
   persist();
   renderConversation();
+  apiFetch("/api/chat/conversations", { method: "DELETE" }).catch(() => {});
   settingsDialog.close();
   showToast("Conversation history cleared.");
 });

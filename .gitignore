@@ -18,4 +18,5 @@ xcuserdata/
 Confidential.txt
 client_*.plist
 client_secret_*.json
+static/avatars/
 

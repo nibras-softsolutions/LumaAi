@@ -243,8 +243,20 @@ public struct EditProfileView: View {
             Task {
                 if let data = try? await newItem?.loadTransferable(type: Data.self) {
                     await MainActor.run {
-                        if let img = UIImage(data: data), let compressed = img.jpegData(compressionQuality: 0.85) {
-                            self.selectedImageData = compressed
+                        if let img = UIImage(data: data) {
+                            let maxDim: CGFloat = 512
+                            let size = img.size
+                            let scale = min(maxDim / size.width, maxDim / size.height, 1.0)
+                            let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+                            let renderer = UIGraphicsImageRenderer(size: newSize)
+                            let scaledImage = renderer.image { _ in
+                                img.draw(in: CGRect(origin: .zero, size: newSize))
+                            }
+                            if let compressed = scaledImage.jpegData(compressionQuality: 0.8) {
+                                self.selectedImageData = compressed
+                            } else {
+                                self.selectedImageData = data
+                            }
                         } else {
                             self.selectedImageData = data
                         }
@@ -336,22 +348,15 @@ public struct EditProfileView: View {
         let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanBio = bio.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Capture previous state to check if photo changed
         let previousImageData = userPreferences.customProfileImageData
         let photoChanged = (selectedImageData != previousImageData)
 
-        // 1. Save locally immediately so UI is responsive and never loses user edits
-        userPreferences.customDisplayName = cleanName.isEmpty ? nil : cleanName
-        userPreferences.customBio = cleanBio.isEmpty ? nil : cleanBio
-        userPreferences.customProfileImageData = selectedImageData
-        userPreferences.customAvatarEmoji = selectedEmoji
-        userPreferences.customAvatarColorHex = selectedColorHex
-
         Task {
             do {
+                try? await APIClient.shared.ensureSession()
                 var updatedUser: User? = nil
 
-                // 2. Upload or delete photo if changed
+                // 1. Upload or delete photo if changed
                 if photoChanged {
                     if let imageData = selectedImageData {
                         updatedUser = try await APIClient.shared.uploadProfilePhoto(imageData: imageData)
@@ -360,7 +365,7 @@ public struct EditProfileView: View {
                     }
                 }
 
-                // 3. Update profile fields on remote server
+                // 2. Update profile fields on remote server
                 updatedUser = try await APIClient.shared.updateUserProfile(
                     customName: cleanName.isEmpty ? nil : cleanName,
                     bio: cleanBio.isEmpty ? nil : cleanBio,
@@ -369,6 +374,11 @@ public struct EditProfileView: View {
                 )
 
                 await MainActor.run {
+                    userPreferences.customDisplayName = cleanName.isEmpty ? nil : cleanName
+                    userPreferences.customBio = cleanBio.isEmpty ? nil : cleanBio
+                    userPreferences.customProfileImageData = selectedImageData
+                    userPreferences.customAvatarEmoji = selectedEmoji
+                    userPreferences.customAvatarColorHex = selectedColorHex
                     if let user = updatedUser {
                         userPreferences.syncWithServerUser(user)
                     }
@@ -379,11 +389,11 @@ public struct EditProfileView: View {
                 }
             } catch {
                 await MainActor.run {
-                    isSaving = false
-                    // Local profile is already saved; gracefully complete even if server returned 404 or offline
-                    HapticFeedback.light()
-                    onSave()
-                    dismiss()
+                    // Revert to previous profile image if upload failed
+                    self.selectedImageData = previousImageData
+                    self.errorMessage = error.localizedDescription
+                    self.showErrorAlert = true
+                    self.isSaving = false
                 }
             }
         }

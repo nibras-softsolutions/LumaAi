@@ -1,9 +1,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import time
@@ -36,6 +39,7 @@ from auth import (
     require_user,
     router as auth_router,
     user_router,
+    chat_router,
 )
 from tools import (
     ASPECT_RATIOS,
@@ -52,13 +56,103 @@ from tools import (
 )
 
 
-class OpenAICompatibleModel:
-    """Universal adapter for hosted model APIs (Groq, OpenRouter, Together, OpenAI)."""
+class ProviderRateLimitError(Exception):
+    """Raised when the AI provider returns HTTP 429 and retries are exhausted."""
 
-    def __init__(self, model: str, base_url: str, api_key: str):
+    def __init__(
+        self,
+        message: str = "Luma AI is currently experiencing high demand. Please try again in a few moments.",
+        retry_after: float | None = None,
+    ):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class ProviderConcurrencyError(Exception):
+    """Raised when server AI capacity is saturated and request times out waiting for a slot."""
+
+    def __init__(
+        self,
+        message: str = "Luma AI is currently busy handling other requests. Please try again in a moment.",
+    ):
+        super().__init__(message)
+
+
+class ProviderAPIError(Exception):
+    """Raised when the AI provider returns an unexpected non-200 error."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(f"Model provider error ({status_code}): {message}")
+        self.status_code = status_code
+        self.provider_message = message
+
+
+def parse_retry_after(response: httpx.Response, body_text: str = "") -> float | None:
+    """Extract retry delay in seconds from provider response headers or body."""
+    # 1. Standard Retry-After header (seconds)
+    header_val = response.headers.get("retry-after")
+    if header_val:
+        try:
+            val = float(header_val.strip())
+            if 0 < val <= 60:
+                return val
+        except ValueError:
+            pass
+
+    # 2. Rate-limit reset headers (e.g. Groq x-ratelimit-reset-requests, x-ratelimit-reset-tokens)
+    for h in ("x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"):
+        val_str = response.headers.get(h)
+        if val_str:
+            m = re.match(r"^([\d.]+)\s*(ms|s|m)?$", val_str.strip(), re.IGNORECASE)
+            if m:
+                qty = float(m.group(1))
+                unit = (m.group(2) or "s").lower()
+                seconds = qty / 1000.0 if unit == "ms" else (qty * 60.0 if unit == "m" else qty)
+                if 0 < seconds <= 60:
+                    return seconds
+
+    # 3. Pattern in error body (e.g. Groq 'Please try again in 2.5s.')
+    if body_text:
+        match = re.search(r"try again in ([\d.]+)\s*(s|ms|seconds)?", body_text, re.IGNORECASE)
+        if match:
+            try:
+                qty = float(match.group(1))
+                unit = (match.group(2) or "s").lower()
+                seconds = qty / 1000.0 if unit == "ms" else qty
+                if 0 < seconds <= 60:
+                    return seconds
+            except ValueError:
+                pass
+
+    return None
+
+
+MAX_CONCURRENT_AI_REQUESTS = int(os.getenv("MAX_CONCURRENT_AI_REQUESTS", "5"))
+
+
+class OpenAICompatibleModel:
+    """Universal adapter for hosted model APIs (Groq, OpenRouter, Together, OpenAI)
+    with rate limiting, exponential backoff, jitter, Retry-After handling, and concurrency limits."""
+
+    def __init__(
+        self,
+        model: str,
+        base_url: str,
+        api_key: str,
+        max_retries: int = 3,
+        initial_retry_delay: float = 1.0,
+        max_retry_delay: float = 15.0,
+        max_concurrency: int = MAX_CONCURRENT_AI_REQUESTS,
+        concurrency_timeout: float = 15.0,
+    ):
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.max_retries = max_retries
+        self.initial_retry_delay = initial_retry_delay
+        self.max_retry_delay = max_retry_delay
+        self.concurrency_timeout = concurrency_timeout
+        self.concurrency_limiter = asyncio.Semaphore(max_concurrency)
 
     async def astream(self, messages: list[BaseMessage]) -> AsyncIterator[AIMessageChunk]:
         payload_messages = []
@@ -78,38 +172,102 @@ class OpenAICompatibleModel:
             headers["HTTP-Referer"] = "https://luma-ai.vercel.app"
             headers["X-Title"] = "Luma AI"
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json={
-                    "model": self.model,
-                    "messages": payload_messages,
-                    "stream": True,
-                },
-            ) as response:
-                if response.status_code != 200:
-                    error_bytes = await response.aread()
-                    error_msg = error_bytes.decode("utf-8", errors="replace")
-                    raise RuntimeError(
-                        f"Model provider error ({response.status_code}): {error_msg}"
-                    )
-                async for line in response.aiter_lines():
-                    if not line:
+        acquired = False
+        try:
+            try:
+                await asyncio.wait_for(
+                    self.concurrency_limiter.acquire(),
+                    timeout=self.concurrency_timeout,
+                )
+                acquired = True
+            except asyncio.TimeoutError:
+                raise ProviderConcurrencyError(
+                    "Luma AI is currently busy handling other requests. Please try again in a moment."
+                )
+
+            for attempt in range(self.max_retries + 1):
+                try:
+                    async with httpx.AsyncClient(timeout=60.0) as client:
+                        async with client.stream(
+                            "POST",
+                            f"{self.base_url}/chat/completions",
+                            headers=headers,
+                            json={
+                                "model": self.model,
+                                "messages": payload_messages,
+                                "stream": True,
+                            },
+                        ) as response:
+                            if response.status_code == 429:
+                                error_bytes = await response.aread()
+                                error_msg = error_bytes.decode("utf-8", errors="replace")
+                                retry_after = parse_retry_after(response, error_msg)
+
+                                if attempt < self.max_retries:
+                                    base_delay = min(self.max_retry_delay, self.initial_retry_delay * (2 ** attempt))
+                                    jitter = random.uniform(0.1, 0.4) * base_delay
+                                    computed_delay = base_delay + jitter
+                                    delay = max(retry_after or 0.0, computed_delay)
+                                    delay = min(delay, self.max_retry_delay)
+                                    logging.getLogger("ai.groq").warning(
+                                        "Groq/AI provider 429 rate limit (attempt %d/%d). Retrying in %.2fs. Detail: %s",
+                                        attempt + 1,
+                                        self.max_retries,
+                                        delay,
+                                        error_msg[:150],
+                                    )
+                                    await asyncio.sleep(delay)
+                                    continue
+                                else:
+                                    logging.getLogger("ai.groq").error(
+                                        "Groq/AI provider rate limit retries exhausted after %d attempts: %s",
+                                        attempt + 1,
+                                        error_msg,
+                                    )
+                                    raise ProviderRateLimitError(
+                                        "Luma AI is currently experiencing high demand. Please try again in a few moments.",
+                                        retry_after=retry_after,
+                                    )
+
+                            if response.status_code != 200:
+                                error_bytes = await response.aread()
+                                error_msg = error_bytes.decode("utf-8", errors="replace")
+                                raise ProviderAPIError(response.status_code, error_msg)
+
+                            async for line in response.aiter_lines():
+                                if not line:
+                                    continue
+                                if line.startswith("data: "):
+                                    data_str = line[6:].strip()
+                                    if data_str == "[DONE]":
+                                        break
+                                    try:
+                                        data = json.loads(data_str)
+                                        delta = data.get("choices", [{}])[0].get("delta", {})
+                                        text = delta.get("content")
+                                        if text:
+                                            yield AIMessageChunk(content=text)
+                                    except Exception:
+                                        continue
+                            return
+                except (ProviderRateLimitError, ProviderAPIError, ProviderConcurrencyError):
+                    raise
+                except httpx.HTTPError as exc:
+                    if attempt < self.max_retries:
+                        base_delay = min(self.max_retry_delay, self.initial_retry_delay * (2 ** attempt))
+                        logging.getLogger("ai.groq").warning(
+                            "HTTP connection error to AI provider (%s). Retrying in %.2fs (attempt %d/%d)...",
+                            exc,
+                            base_delay,
+                            attempt + 1,
+                            self.max_retries,
+                        )
+                        await asyncio.sleep(base_delay)
                         continue
-                    if line.startswith("data: "):
-                        data_str = line[6:].strip()
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            delta = data.get("choices", [{}])[0].get("delta", {})
-                            text = delta.get("content")
-                            if text:
-                                yield AIMessageChunk(content=text)
-                        except Exception:
-                            continue
+                    raise ProviderAPIError(502, f"Failed to communicate with AI provider: {exc}")
+        finally:
+            if acquired:
+                self.concurrency_limiter.release()
 
 
 # Model provider configuration: "ollama" (default) or "openai" / "groq" / "openrouter"
@@ -204,6 +362,7 @@ app.add_middleware(
 )
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(chat_router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 
@@ -305,52 +464,100 @@ def _sse(event: str, payload: dict[str, str]) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _safe_error(_exc: Exception) -> str:
+def _safe_error(exc: Exception) -> str:
+    if isinstance(exc, ProviderRateLimitError):
+        return str(exc)
+    if isinstance(exc, ProviderConcurrencyError):
+        return str(exc)
+    if isinstance(exc, ProviderAPIError):
+        if exc.status_code == 429:
+            return "Luma AI is currently experiencing high demand. Please try again in a few moments."
+        return "Luma AI is temporarily unavailable. Please try again."
     return "Luma AI is temporarily unavailable. Please try again."
 
 
 async def stream_response(
     messages: list[BaseMessage],
+    raw_request: Request | None = None,
 ) -> AsyncIterator[str]:
-    response_length = 0
-    try:
-        async for chunk in llm.astream(messages):
-            content = chunk.content
-            if isinstance(content, str) and content:
-                text = content
-                remaining = MAX_MESSAGE_LENGTH - response_length
-                if len(text) > remaining:
-                    text = text[:remaining]
-                if text:
+    """Decoupled producer-consumer stream to prevent re-entrant generator races and handle client disconnects cleanly."""
+    queue: asyncio.Queue[tuple[str, dict[str, str]] | None] = asyncio.Queue(maxsize=100)
+    stop_event = asyncio.Event()
+
+    async def producer() -> None:
+        response_length = 0
+        try:
+            async for chunk in llm.astream(messages):
+                if stop_event.is_set():
+                    break
+                content = chunk.content
+                texts: list[str] = []
+                if isinstance(content, str) and content:
+                    texts.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and isinstance(block.get("text"), str) and block["text"]:
+                            texts.append(block["text"])
+
+                for raw_text in texts:
+                    remaining = MAX_MESSAGE_LENGTH - response_length
+                    if remaining <= 0:
+                        await queue.put(("error", {"message": "The response reached the maximum message length."}))
+                        return
+                    text = raw_text[:remaining]
                     response_length += len(text)
-                    yield _sse("token", {"text": text})
-                if len(content) > remaining:
-                    yield _sse(
-                        "error",
-                        {"message": "The response reached the maximum message length."},
-                    )
-                    return
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and isinstance(block.get("text"), str):
-                        if block["text"]:
-                            text = block["text"]
-                            remaining = MAX_MESSAGE_LENGTH - response_length
-                            if len(text) > remaining:
-                                text = text[:remaining]
-                            if text:
-                                response_length += len(text)
-                                yield _sse("token", {"text": text})
-                            if len(block["text"]) > remaining:
-                                yield _sse(
-                                    "error",
-                                    {"message": "The response reached the maximum message length."},
-                                )
-                                return
-        yield _sse("done", {})
-    except Exception as exc:
-        logger.exception("AI response generation failed")
-        yield _sse("error", {"message": _safe_error(exc)})
+                    await queue.put(("token", {"text": text}))
+                    if len(raw_text) > remaining:
+                        await queue.put(("error", {"message": "The response reached the maximum message length."}))
+                        return
+
+            if not stop_event.is_set():
+                await queue.put(("done", {}))
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.exception("AI response generation failed: %s", exc)
+            if not stop_event.is_set():
+                await queue.put(("error", {"message": _safe_error(exc)}))
+        finally:
+            await queue.put(None)
+
+    producer_task = asyncio.create_task(producer())
+    has_errored = False
+
+    try:
+        while True:
+            if raw_request is not None and await raw_request.is_disconnected():
+                break
+
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                if producer_task.done() and queue.empty():
+                    break
+                continue
+
+            if item is None:
+                break
+
+            event, payload = item
+            if event == "error":
+                has_errored = True
+                yield _sse(event, payload)
+                break
+            elif event == "done":
+                if not has_errored:
+                    yield _sse(event, payload)
+                break
+            else:
+                yield _sse(event, payload)
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
+    finally:
+        stop_event.set()
+        producer_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await producer_task
 
 
 async def stream_image_response(
@@ -464,6 +671,7 @@ async def ai_health(_user: User = Depends(require_user)) -> dict[str, str | bool
 @app.post("/api/chat/stream")
 async def chat_stream(
     request: ChatRequest,
+    raw_request: Request = None,  # type: ignore[assignment]
     _user: User = Depends(require_user),
 ) -> StreamingResponse:
     latest_user_message = request.messages[-1]
@@ -485,7 +693,7 @@ async def chat_stream(
     ):
         messages.insert(0, SystemMessage(content=DOWNLOADABLE_CODE_INSTRUCTION))
     return StreamingResponse(
-        stream_response(messages),
+        stream_response(messages, raw_request=raw_request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -774,12 +982,29 @@ async def invalid_request(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
+    errors_list = []
+    for err in exc.errors():
+        loc_parts = [str(p) for p in err.get("loc", []) if p != "body"]
+        field_str = " -> ".join(loc_parts) if loc_parts else "body"
+        msg = err.get("msg", "Invalid value")
+        err_type = err.get("type", "value_error")
+        errors_list.append({"field": field_str, "message": msg, "type": err_type})
+
+    detail_msg = "; ".join(f"{e['field']}: {e['message']}" for e in errors_list) or "Validation failed."
     return JSONResponse(
         status_code=422,
         content={
             "detail": "Invalid request. Check message count, size, and order.",
+            "error_summary": detail_msg,
+            "errors": errors_list,
             "path": request.url.path,
-            "validation_issues": len(exc.errors()),
+            "validation_issues": len(errors_list),
+            "validation_rules": {
+                "messages": "Must be non-empty list of max 20 messages",
+                "content": "Must be non-empty string of max 4000 characters",
+                "order": "The latest message in history must have role 'user'",
+                "total_history_length": "Combined content cannot exceed 16000 characters",
+            },
         },
     )
 

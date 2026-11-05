@@ -1,5 +1,12 @@
 import Foundation
 
+public struct SyncConversationsRequest: Codable {
+    public let conversations: [Conversation]
+    public init(conversations: [Conversation]) {
+        self.conversations = conversations
+    }
+}
+
 public struct EmptyResponse: Codable {
     public init() {}
 }
@@ -20,6 +27,11 @@ public protocol APIClientProtocol: AnyObject {
     func fetchCustomCharacters() async throws -> [CustomCharacterRemote]
     func createRemoteCustomCharacter(_ payload: CustomCharacterPayload) async throws -> CustomCharacterRemote
     func deleteRemoteCustomCharacter(id: String) async throws
+    func fetchConversations() async throws -> [Conversation]
+    func saveConversation(_ conversation: Conversation) async throws
+    func syncConversations(_ conversations: [Conversation]) async throws -> [Conversation]
+    func deleteConversation(id: UUID) async throws
+    func clearAllConversations() async throws
 }
 
 public extension APIClientProtocol {
@@ -34,10 +46,12 @@ public extension APIClientProtocol {
     func ensureSession() async throws {}
 
     func fetchUserProfile() async throws -> User {
-        try await request(.userProfile, body: nil)
+        try await ensureSession()
+        return try await request(.userProfile, body: nil)
     }
 
     func updateUserProfile(customName: String?, bio: String?, avatarEmoji: String?, avatarColorHex: String?) async throws -> User {
+        try await ensureSession()
         let req = UpdateProfileRequest(
             customName: customName,
             bio: bio,
@@ -48,17 +62,20 @@ public extension APIClientProtocol {
     }
 
     func uploadProfilePhoto(imageData: Data) async throws -> User {
+        try await ensureSession()
         let base64String = "data:image/jpeg;base64," + imageData.base64EncodedString()
         let payload = UploadPhotoPayload(image: base64String)
         return try await request(.uploadProfilePhoto, body: payload)
     }
 
     func deleteProfilePhoto() async throws -> User {
-        try await request(.deleteProfilePhoto, body: nil)
+        try await ensureSession()
+        return try await request(.deleteProfilePhoto, body: nil)
     }
 
     func resetUserProfile() async throws -> User {
-        try await request(.resetUserProfile, body: nil)
+        try await ensureSession()
+        return try await request(.resetUserProfile, body: nil)
     }
 
     func fetchCustomCharacters() async throws -> [CustomCharacterRemote] {
@@ -71,6 +88,32 @@ public extension APIClientProtocol {
 
     func deleteRemoteCustomCharacter(id: String) async throws {
         let _: ServerHealth = try await request(.userCharacter(id: id), body: nil)
+    }
+
+    func fetchConversations() async throws -> [Conversation] {
+        try await ensureSession()
+        return try await request(.getConversations, body: nil)
+    }
+
+    func saveConversation(_ conversation: Conversation) async throws {
+        try await ensureSession()
+        let _: EmptyResponse = try await request(.saveConversation, body: conversation)
+    }
+
+    func syncConversations(_ conversations: [Conversation]) async throws -> [Conversation] {
+        try await ensureSession()
+        let req = SyncConversationsRequest(conversations: conversations)
+        return try await request(.syncConversations, body: req)
+    }
+
+    func deleteConversation(id: UUID) async throws {
+        try await ensureSession()
+        let _: EmptyResponse = try await request(.deleteConversation(id: id.uuidString), body: nil)
+    }
+
+    func clearAllConversations() async throws {
+        try await ensureSession()
+        let _: EmptyResponse = try await request(.clearAllConversations, body: nil)
     }
 }
 
@@ -161,7 +204,9 @@ public final class APIClient: APIClientProtocol {
 
         if let body = body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONEncoder().encode(body)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            request.httpBody = try encoder.encode(body)
         }
         return request
     }
@@ -183,6 +228,7 @@ public final class APIClient: APIClientProtocol {
 
         do {
             let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(T.self, from: data)
         } catch {
             throw NetworkError.decodingError(error.localizedDescription)
@@ -366,6 +412,9 @@ public final class APIClient: APIClientProtocol {
                 throw NetworkError.forbidden(msg)
             }
             if http.statusCode == 404 {
+                if let msg = parseErrorMessage(from: data), !msg.isEmpty {
+                    throw NetworkError.serverError(statusCode: 404, message: msg)
+                }
                 throw NetworkError.notFound
             }
             if http.statusCode == 429 {
