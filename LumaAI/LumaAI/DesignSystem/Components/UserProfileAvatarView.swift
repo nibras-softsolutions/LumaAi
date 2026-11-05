@@ -124,7 +124,15 @@ public struct UserProfileAvatarView: View {
             return URL(string: urlString)
         }
         let path = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-        return APIConfiguration.defaultBaseURL.appendingPathComponent(path)
+        if #available(iOS 16.0, macOS 13.0, *) {
+            return APIConfiguration.defaultBaseURL.appending(path: path)
+        } else {
+            var url = APIConfiguration.defaultBaseURL
+            for comp in path.split(separator: "/") {
+                url = url.appendingPathComponent(String(comp))
+            }
+            return url
+        }
     }
 }
 

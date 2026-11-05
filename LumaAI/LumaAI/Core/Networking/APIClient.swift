@@ -369,7 +369,15 @@ public final class APIClient: APIClientProtocol {
             fullURL = parsed
         } else {
             let path = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            fullURL = configuration.baseURL.appendingPathComponent(path)
+            if #available(iOS 16.0, macOS 13.0, *) {
+                fullURL = configuration.baseURL.appending(path: path)
+            } else {
+                var url = configuration.baseURL
+                for comp in path.split(separator: "/") {
+                    url = url.appendingPathComponent(String(comp))
+                }
+                fullURL = url
+            }
         }
 
         var req = URLRequest(url: fullURL)
