@@ -1267,6 +1267,209 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ocr_res.status_code, 200)
         self.assertIn("text", ocr_res.json())
 
+    async def test_cookie_security_development_mode(self):
+        """In local development, cookies have HttpOnly, SameSite=Lax, Path=/ and Secure=False."""
+        email = f"cookie_dev_{secrets.token_hex(4)}@example.com"
+        clean_env = {
+            "RENDER": "",
+            "RENDER_SERVICE_ID": "",
+            "RENDER_INSTANCE_ID": "",
+            "RENDER_EXTERNAL_HOSTNAME": "",
+            "RENDER_EXTERNAL_URL": "",
+            "VERCEL": "",
+            "VERCEL_ENV": "",
+            "ENVIRONMENT": "development",
+            "ENV": "development",
+            "APP_ENV": "development",
+            "COOKIE_SECURE": "false",
+            "COOKIE_SAMESITE": "lax",
+        }
+        with patch.dict(os.environ, clean_env):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Dev User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie_header = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("httponly", cookie_header)
+            self.assertIn("samesite=lax", cookie_header)
+            self.assertIn("path=/", cookie_header)
+            self.assertNotIn("secure", cookie_header)
+
+    async def test_cookie_security_render_production(self):
+        """On Render (RENDER=true), all auth flows (register, login, google, logout) use Secure=True."""
+        email = f"cookie_render_{secrets.token_hex(4)}@example.com"
+        render_env = {
+            "RENDER": "true",
+            "COOKIE_SECURE": "",
+            "COOKIE_SAMESITE": "lax",
+        }
+        with patch.dict(os.environ, render_env):
+            # 1. Registration
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Render User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            reg_cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", reg_cookie)
+            self.assertIn("httponly", reg_cookie)
+            self.assertIn("samesite=lax", reg_cookie)
+            self.assertIn("path=/", reg_cookie)
+
+            # 2. Logout
+            logout = await self.client.post("/api/auth/logout")
+            self.assertEqual(logout.status_code, 204)
+            logout_cookie = logout.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", logout_cookie)
+            self.assertIn("httponly", logout_cookie)
+            self.assertIn("samesite=lax", logout_cookie)
+            self.assertIn("path=/", logout_cookie)
+
+            # 3. Login
+            login = await self.client.post(
+                "/api/auth/login",
+                json={"email": email, "password": "Password123!"},
+            )
+            self.assertEqual(login.status_code, 200)
+            login_cookie = login.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", login_cookie)
+            self.assertIn("httponly", login_cookie)
+            self.assertIn("samesite=lax", login_cookie)
+            self.assertIn("path=/", login_cookie)
+
+            # 4. Google Login
+            google_mock = {
+                "iss": "https://accounts.google.com",
+                "sub": f"google-{secrets.token_hex(4)}",
+                "email": f"google_{secrets.token_hex(4)}@example.com",
+                "name": "Google Render User",
+                "aud": auth.GOOGLE_WEB_CLIENT_ID,
+                "exp": 9999999999,
+            }
+            with patch("auth.verify_google_id_token", new_callable=AsyncMock) as mock_verify:
+                mock_verify.return_value = google_mock
+                g_res = await self.client.post(
+                    "/api/auth/google",
+                    json={"id_token": "valid_token"},
+                )
+                self.assertEqual(g_res.status_code, 200)
+                g_cookie = g_res.headers.get("set-cookie", "").casefold()
+                self.assertIn("secure", g_cookie)
+                self.assertIn("httponly", g_cookie)
+                self.assertIn("samesite=lax", g_cookie)
+                self.assertIn("path=/", g_cookie)
+
+    async def test_cookie_security_render_service_id(self):
+        """Render service environment variable RENDER_SERVICE_ID enforces Secure=True."""
+        email = f"render_srv_{secrets.token_hex(4)}@example.com"
+        with patch.dict(os.environ, {"RENDER_SERVICE_ID": "srv-c1234567890abcdef"}):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Srv User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", cookie)
+
+    async def test_cookie_security_unsafe_setting_overridden_in_production(self):
+        """COOKIE_SECURE=false in production is explicitly overridden to Secure=True with a logged warning."""
+        email = f"unsafe_override_{secrets.token_hex(4)}@example.com"
+        unsafe_env = {
+            "RENDER": "true",
+            "COOKIE_SECURE": "false",  # Accidental unsafe setting from .env.example
+        }
+        with patch.dict(os.environ, unsafe_env):
+            with self.assertLogs("auth", level="WARNING") as cm:
+                login = await self.client.post(
+                    "/api/auth/register",
+                    json={"full_name": "Unsafe User", "email": email, "password": "Password123!"},
+                )
+                self.assertEqual(login.status_code, 201)
+                cookie = login.headers.get("set-cookie", "").casefold()
+                self.assertIn("secure", cookie)
+                self.assertTrue(any("SECURITY WARNING" in log for log in cm.output))
+
+    async def test_cookie_security_environment_production(self):
+        """ENVIRONMENT=production or ENV=prod enforces Secure=True."""
+        email = f"env_prod_{secrets.token_hex(4)}@example.com"
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RENDER": ""}):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Prod User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", cookie)
+
+    async def test_cookie_security_vercel_production(self):
+        """VERCEL=1 or VERCEL_ENV=production enforces Secure=True."""
+        email = f"vercel_prod_{secrets.token_hex(4)}@example.com"
+        with patch.dict(os.environ, {"VERCEL": "1", "RENDER": ""}):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Vercel User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", cookie)
+
+    async def test_cookie_security_explicit_secure_in_dev(self):
+        """In local development, setting COOKIE_SECURE=true explicitly enables Secure=True."""
+        email = f"dev_secure_{secrets.token_hex(4)}@example.com"
+        with patch.dict(os.environ, {"COOKIE_SECURE": "true", "RENDER": "", "ENVIRONMENT": "development"}):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "Dev Secure User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", cookie)
+
+    async def test_cookie_security_samesite_none_enforces_secure(self):
+        """Setting COOKIE_SAMESITE=none enforces Secure=True even in development."""
+        email = f"samesite_none_{secrets.token_hex(4)}@example.com"
+        with patch.dict(os.environ, {"COOKIE_SAMESITE": "none", "RENDER": "", "COOKIE_SECURE": "false"}):
+            reg = await self.client.post(
+                "/api/auth/register",
+                json={"full_name": "None User", "email": email, "password": "Password123!"},
+            )
+            self.assertEqual(reg.status_code, 201)
+            cookie = reg.headers.get("set-cookie", "").casefold()
+            self.assertIn("secure", cookie)
+            self.assertIn("samesite=none", cookie)
+
+    def test_production_detection_helper_functions(self):
+        """Direct unit test of is_production_environment and is_cookie_secure."""
+        # Clean local
+        with patch.dict(os.environ, {"RENDER": "", "RENDER_SERVICE_ID": "", "VERCEL": "", "ENVIRONMENT": ""}):
+            self.assertFalse(auth.is_production_environment())
+
+        # Render
+        with patch.dict(os.environ, {"RENDER": "true"}):
+            self.assertTrue(auth.is_production_environment())
+            self.assertTrue(auth.is_cookie_secure())
+
+        # Render service ID
+        with patch.dict(os.environ, {"RENDER": "", "RENDER_SERVICE_ID": "srv-123"}):
+            self.assertTrue(auth.is_production_environment())
+            self.assertTrue(auth.is_cookie_secure())
+
+        # Vercel
+        with patch.dict(os.environ, {"VERCEL": "1", "RENDER": ""}):
+            self.assertTrue(auth.is_production_environment())
+            self.assertTrue(auth.is_cookie_secure())
+
+        # ENV production
+        with patch.dict(os.environ, {"ENV": "production", "RENDER": ""}):
+            self.assertTrue(auth.is_production_environment())
+            self.assertTrue(auth.is_cookie_secure())
+
+        # Unsafe setting in production overridden
+        with patch.dict(os.environ, {"RENDER": "true", "COOKIE_SECURE": "false"}):
+            self.assertTrue(auth.is_production_environment())
+            self.assertTrue(auth.is_cookie_secure())
+
 
 if __name__ == "__main__":
     unittest.main()

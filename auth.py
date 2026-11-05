@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import io
+import logging
 import os
 from pathlib import Path
 import re
@@ -64,22 +65,113 @@ if "asyncpg" in DATABASE_URL:
         parsed_db_url.fragment,
     ))
 
+logger = logging.getLogger("auth")
+
 SESSION_COOKIE = "luma_session"
 SESSION_LIFETIME = timedelta(days=30)
 LOGIN_WINDOW = timedelta(minutes=15)
 MAX_LOGIN_ATTEMPTS = 8
-COOKIE_SECURE_SETTING = os.getenv("COOKIE_SECURE")
-COOKIE_SECURE = (
-    COOKIE_SECURE_SETTING.casefold() == "true"
-    if COOKIE_SECURE_SETTING is not None
-    else bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
-)
-COOKIE_SAMESITE_SETTING = os.getenv("COOKIE_SAMESITE", "lax").casefold()
-COOKIE_SAMESITE = (
-    COOKIE_SAMESITE_SETTING
-    if COOKIE_SAMESITE_SETTING in {"lax", "strict", "none"}
-    else "lax"
-)
+
+
+def is_production_environment() -> bool:
+    """Detect whether the application is running in a production or deployed cloud environment.
+
+    Checks:
+    - Render platform (RENDER='true', RENDER_SERVICE_ID, RENDER_INSTANCE_ID, RENDER_EXTERNAL_HOSTNAME)
+    - Vercel platform (VERCEL='1'/'true', VERCEL_ENV in {'production', 'preview'})
+    - Standard application environment variables (ENVIRONMENT, ENV, APP_ENV, FASTAPI_ENV in {'production', 'prod', 'staging', 'live'})
+    """
+    # 1. Render platform detection (Render automatically sets RENDER="true" on all deployed services)
+    if os.getenv("RENDER", "").strip().casefold() in {"true", "1"}:
+        return True
+    if any(
+        os.getenv(k)
+        for k in (
+            "RENDER_SERVICE_ID",
+            "RENDER_INSTANCE_ID",
+            "RENDER_EXTERNAL_HOSTNAME",
+            "RENDER_EXTERNAL_URL",
+        )
+    ):
+        return True
+
+    # 2. Vercel platform detection
+    if os.getenv("VERCEL", "").strip().casefold() in {"true", "1"}:
+        return True
+    if os.getenv("VERCEL_ENV", "").strip().casefold() in {"production", "preview"}:
+        return True
+
+    # 3. Standard environment variable conventions
+    for env_key in ("ENVIRONMENT", "ENV", "APP_ENV", "FASTAPI_ENV"):
+        val = os.getenv(env_key, "").strip().casefold()
+        if val in {"production", "prod", "staging", "live"}:
+            return True
+
+    return False
+
+
+def get_cookie_samesite() -> str:
+    """Return the validated SameSite policy for session cookies ('lax', 'strict', or 'none')."""
+    setting = os.getenv("COOKIE_SAMESITE")
+    if setting is not None:
+        val = setting.strip().casefold()
+        if val in {"lax", "strict", "none"}:
+            return val
+    mod_val = globals().get("COOKIE_SAMESITE")
+    if isinstance(mod_val, str) and mod_val.casefold() in {"lax", "strict", "none"}:
+        return mod_val.casefold()
+    return "lax"
+
+
+def is_cookie_secure() -> bool:
+    """Determine whether session cookies must be marked with the Secure flag.
+
+    Security rules:
+    1. If running in production (Render, Vercel, or production ENV), Secure is ALWAYS
+       enforced (True). An unsafe setting such as COOKIE_SECURE=false in production is
+       explicitly overridden and logged as a warning to prevent misconfiguration.
+    2. If COOKIE_SAMESITE is 'none', Secure is ALWAYS enforced (browsers reject SameSite=None
+       without Secure).
+    3. In local development / non-production, COOKIE_SECURE defaults to False to allow
+       localhost HTTP development, but can be opted into via COOKIE_SECURE=true.
+    """
+    samesite = get_cookie_samesite()
+    if samesite == "none":
+        return True
+
+    in_prod = is_production_environment()
+    raw_setting = os.getenv("COOKIE_SECURE")
+
+    if in_prod:
+        if raw_setting is not None and raw_setting.strip().casefold() in {"false", "0", "no", "off"}:
+            logger.warning(
+                "SECURITY WARNING: COOKIE_SECURE is set to %r in a production environment. "
+                "Overriding to Secure=True to protect session cookies from transmission over unencrypted HTTP.",
+                raw_setting,
+            )
+        return True
+
+    if raw_setting is not None:
+        return raw_setting.strip().casefold() in {"true", "1", "yes", "on"}
+
+    module_secure = globals().get("COOKIE_SECURE")
+    if module_secure is True:
+        return True
+
+    return False
+
+
+def _get_cookie_attributes() -> tuple[bool, str]:
+    """Resolve active (secure, samesite) settings, enforcing production security guarantees."""
+    secure = is_cookie_secure()
+    samesite = get_cookie_samesite()
+    if samesite == "none":
+        secure = True
+    return secure, samesite
+
+
+COOKIE_SECURE = is_cookie_secure()
+COOKIE_SAMESITE = get_cookie_samesite()
 
 _default_origins = [
     "http://127.0.0.1:8765",
@@ -305,13 +397,25 @@ def _ensure_same_origin(request: Request) -> None:
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
+    secure, samesite = _get_cookie_attributes()
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
         max_age=int(SESSION_LIFETIME.total_seconds()),
         httponly=True,
-        secure=COOKIE_SECURE or (COOKIE_SAMESITE == "none"),
-        samesite=COOKIE_SAMESITE,
+        secure=secure,
+        samesite=samesite,
+        path="/",
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    secure, samesite = _get_cookie_attributes()
+    response.delete_cookie(
+        key=SESSION_COOKIE,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
         path="/",
     )
 
@@ -630,13 +734,7 @@ async def logout(request: Request) -> Response:
             if session:
                 await db.delete(session)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
-    response.delete_cookie(
-        key=SESSION_COOKIE,
-        httponly=True,
-        secure=COOKIE_SECURE or (COOKIE_SAMESITE == "none"),
-        samesite=COOKIE_SAMESITE,
-        path="/",
-    )
+    _clear_session_cookie(response)
     return response
 
 
