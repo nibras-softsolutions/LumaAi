@@ -280,7 +280,7 @@ public struct AuthView: View {
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
-                                .background(Color.white)
+                                .background(Color.lumaSurface)
                                 .clipShape(Capsule())
                                 .overlay(
                                     Capsule().stroke(Color.orbixCardBorder, lineWidth: 1.2)
@@ -291,7 +291,7 @@ public struct AuthView: View {
                             .disabled(viewModel.isLoading || viewModel.isGoogleLoading)
                         }
                         .padding(22)
-                        .background(Color.white)
+                        .background(Color.lumaSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 24, style: .continuous)

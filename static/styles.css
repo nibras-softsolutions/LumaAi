@@ -2,6 +2,8 @@
   color-scheme: light;
   --background: #f7f7f5;
   --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: rgb(255 255 255 / 85%);
   --text: #202123;
   --muted: #6b7280;
   --faint: #9ca3af;
@@ -9,15 +11,75 @@
   --border-strong: #d8dce3;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
+  --accent-gold: #ffc43d;
   --sidebar: #f3f3f1;
+  --sidebar-border: rgb(32 33 35 / 4%);
   --success: #23845b;
   --danger: #b54747;
+  --topbar-bg: rgb(247 247 245 / 91%);
+  --pill-bg: #171717;
+  --pill-text: #ffffff;
+  --input-bg: #ffffff;
   --shadow: 0 16px 48px rgb(24 32 48 / 10%);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* System-aware Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: #121214;
+    --surface: #1c1c20;
+    --surface-elevated: #25252a;
+    --surface-hover: #26262c;
+    --text: #f5f5f7;
+    --muted: #9e9ea7;
+    --faint: #6e6e77;
+    --border: #2e2e36;
+    --border-strong: #383842;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-gold: #ffc43d;
+    --sidebar: #161619;
+    --sidebar-border: #222228;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --topbar-bg: rgb(18 18 20 / 88%);
+    --pill-bg: #2e2e36;
+    --pill-text: #ffffff;
+    --input-bg: #161619;
+    --shadow: 0 16px 48px rgb(0 0 0 / 45%);
+  }
+}
+
+/* Explicit Dark Mode selection */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #121214;
+  --surface: #1c1c20;
+  --surface-elevated: #25252a;
+  --surface-hover: #26262c;
+  --text: #f5f5f7;
+  --muted: #9e9ea7;
+  --faint: #6e6e77;
+  --border: #2e2e36;
+  --border-strong: #383842;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-gold: #ffc43d;
+  --sidebar: #161619;
+  --sidebar-border: #222228;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --topbar-bg: rgb(18 18 20 / 88%);
+  --pill-bg: #2e2e36;
+  --pill-text: #ffffff;
+  --input-bg: #161619;
+  --shadow: 0 16px 48px rgb(0 0 0 / 45%);
 }
 
 * { box-sizing: border-box; }
@@ -1866,4 +1928,363 @@ body { padding: 16px; }
   background-repeat: no-repeat;
   text-indent: -9999px;
   overflow: hidden;
+}
+
+/* ==========================================================================
+   Theme Switcher & Clean Dark Mode Component Rules
+   ========================================================================== */
+
+.theme-options-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.theme-choice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.theme-choice-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.theme-choice-btn.active {
+  color: var(--text);
+  background: var(--surface-elevated);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 1px var(--accent-gold);
+}
+
+#themeToggleButton .theme-icon-light {
+  display: none;
+}
+
+#themeToggleButton .theme-icon-dark {
+  display: block;
+}
+
+:root[data-theme="dark"] #themeToggleButton .theme-icon-light {
+  display: block;
+}
+
+:root[data-theme="dark"] #themeToggleButton .theme-icon-dark {
+  display: none;
+}
+
+/* Base adaptive component styles */
+.topbar {
+  background: var(--topbar-bg) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar {
+  border-right: 1px solid var(--sidebar-border) !important;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--border) !important;
+}
+
+.search-box {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.search-box input {
+  color: var(--text) !important;
+}
+
+.composer-area {
+  background: var(--background) !important;
+  border-top: 1px solid var(--border);
+}
+
+.composer {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.composer:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.composer textarea {
+  color: var(--text) !important;
+}
+
+.composer textarea::placeholder {
+  color: var(--muted) !important;
+}
+
+.composer-pill {
+  background: var(--surface-elevated) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.composer-pill .pill-icon {
+  color: var(--text) !important;
+}
+
+.aspect-selector select {
+  background: var(--surface-elevated) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.aspect-selector select:hover,
+.aspect-selector select:focus {
+  border-color: var(--accent) !important;
+}
+
+.suggestion {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.suggestion strong {
+  color: var(--text) !important;
+}
+
+.suggestion span {
+  color: var(--muted) !important;
+}
+
+.suggestion:hover {
+  background: var(--surface-hover) !important;
+  border-color: var(--accent) !important;
+}
+
+.history-item {
+  color: var(--text) !important;
+}
+
+.history-item:hover, .history-item.active {
+  background: var(--surface-hover) !important;
+  border-color: var(--border) !important;
+}
+
+.history-action:hover {
+  background: var(--surface-elevated) !important;
+  color: var(--text) !important;
+}
+
+.message-body {
+  color: var(--text) !important;
+}
+
+.message.user .message-body {
+  color: var(--text) !important;
+}
+
+.message-body h1, .message-body h2, .message-body h3, .message-body h4 {
+  color: var(--text) !important;
+}
+
+.message-body :not(pre) > code {
+  background: var(--surface-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Modals & Dialogs */
+dialog.settings-dialog,
+dialog.modal-dialog {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.settings-account-card {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.settings-account-info strong {
+  color: var(--text) !important;
+}
+
+.settings-model-card {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.settings-model-card strong {
+  color: var(--text) !important;
+}
+
+.character-card {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.character-card:hover, .character-card.active {
+  background: var(--surface-hover) !important;
+  border-color: var(--accent-gold) !important;
+}
+
+.character-name strong {
+  color: var(--text) !important;
+}
+
+.privacy-notice {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--muted) !important;
+}
+
+.privacy-notice strong {
+  color: var(--text) !important;
+}
+
+.modal-form-group label {
+  color: var(--muted) !important;
+}
+
+.modal-form-group input,
+.modal-form-group textarea {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.modal-form-group input:focus,
+.modal-form-group textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.emoji-choice-btn {
+  background: var(--surface-elevated) !important;
+  border: 1.5px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.emoji-choice-btn.selected {
+  background: var(--surface) !important;
+  border-color: var(--accent-gold) !important;
+  box-shadow: 0 0 0 2px var(--accent-gold) !important;
+}
+
+.settings-btn-secondary {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.settings-btn-secondary:hover {
+  background: var(--surface-hover) !important;
+  border-color: var(--border-strong) !important;
+}
+
+.settings-btn-primary {
+  background: var(--pill-bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--pill-text) !important;
+}
+
+/* Auth Cards & Landing Pages */
+.experience-view {
+  background: var(--background) !important;
+  color: var(--text) !important;
+}
+
+.experience-brand {
+  color: var(--text) !important;
+}
+
+.auth-card {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.auth-card h1, .onboarding-content h1 {
+  color: var(--text) !important;
+}
+
+.auth-sparkle {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--accent-gold) !important;
+}
+
+.auth-card input {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.google-custom-btn {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.google-custom-btn:hover {
+  background: var(--surface-hover) !important;
+}
+
+.secondary-button {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.secondary-button:hover {
+  background: var(--surface-hover) !important;
+}
+
+.primary-button {
+  background: var(--pill-bg) !important;
+  border-color: var(--pill-bg) !important;
+  color: var(--pill-text) !important;
+}
+
+/* Voice Assistant Mode in Dark Mode */
+.voice-overlay {
+  background: var(--background) !important;
+  color: var(--text) !important;
+}
+
+.voice-action-pill {
+  background: var(--surface-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* History Dropdown Menu */
+.history-menu {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.history-menu button {
+  color: var(--text) !important;
+}
+
+.history-menu button:hover {
+  background: var(--surface-hover) !important;
 }

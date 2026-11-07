@@ -41,30 +41,29 @@ struct RootContentView: View {
         Group {
             if appEnv.authManager.isRestoringSession {
                 ZStack {
-                    Color.black
+                    Color.lumaCanvas
                         .ignoresSafeArea()
 
                     VStack(spacing: 20) {
                         Circle()
-                            .fill(Color.white.opacity(0.12))
+                            .fill(Color.lumaSurfaceElevated)
                             .frame(width: 72, height: 72)
                             .overlay(
                                 Image(systemName: "sparkle")
                                     .font(.system(size: 32, weight: .light))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.lumaPrimaryText)
                             )
 
                         Text("Luma AI")
                             .font(LumaTypography.title)
-                            .foregroundColor(.white)
+                            .foregroundColor(.lumaPrimaryText)
 
                         ProgressView()
-                            .tint(.white.opacity(0.6))
+                            .tint(.lumaSecondaryText)
                             .scaleEffect(0.9)
                             .padding(.top, 8)
                     }
                 }
-                .preferredColorScheme(.dark)
             } else if shouldShowOnboarding {
                 OnboardingView(preferences: appEnv.userPreferences) {
                     withAnimation(.easeInOut(duration: 0.35)) {

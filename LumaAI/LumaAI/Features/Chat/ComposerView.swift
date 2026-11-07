@@ -102,7 +102,7 @@ public struct ComposerView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 18))
                                 .foregroundColor(Color.orbixPrimaryText)
-                                .background(Circle().fill(Color.white))
+                                .background(Circle().fill(Color.lumaSurface))
                         }
                         .offset(x: 6, y: -6)
                     }
@@ -120,7 +120,7 @@ public struct ComposerView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.lumaSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -274,7 +274,7 @@ public struct ComposerView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Color.white)
+            .background(Color.lumaSurface)
             .clipShape(Capsule())
             .overlay(
                 Capsule()

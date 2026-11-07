@@ -37,6 +37,7 @@ public enum APIEndpoint {
     case deleteConversation(id: String)
     case clearAllConversations
     case syncConversations
+    case signingKey
 
     public static var aiHealth: APIEndpoint { .healthAI }
     public static var imageGenerate: APIEndpoint { .generateImage }
@@ -84,6 +85,8 @@ public enum APIEndpoint {
             path = "api/chat/conversations/\(id)"
         case .syncConversations:
             path = "api/chat/sync"
+        case .signingKey:
+            path = "api/auth/signing-key"
         }
 
         if #available(iOS 16.0, macOS 13.0, *) {
@@ -101,7 +104,7 @@ public enum APIEndpoint {
         switch self {
         case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters, .getConversations:
             return "GET"
-        case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice, .uploadProfilePhoto, .saveConversation, .syncConversations:
+        case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice, .uploadProfilePhoto, .saveConversation, .syncConversations, .signingKey:
             return "POST"
         case .updateUserProfile:
             return "PUT"

@@ -77,10 +77,10 @@ public struct SettingsView: View {
                     }) {
                         Text("Done")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(Color.lumaInversePrimaryText)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
-                            .background(Color.black)
+                            .background(Color.lumaPrimaryText)
                             .clipShape(Capsule())
                     }
                 }
@@ -285,7 +285,7 @@ public struct SettingsView: View {
                                             .foregroundColor(.settingsSecondaryText)
                                             .padding(.horizontal, 5)
                                             .padding(.vertical, 1.5)
-                                            .background(Color.black.opacity(0.05))
+                                            .background(Color.lumaSecondaryText.opacity(0.12))
                                             .clipShape(Capsule())
                                     } else {
                                         Text("Custom")

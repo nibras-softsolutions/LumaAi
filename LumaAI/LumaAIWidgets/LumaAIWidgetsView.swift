@@ -71,6 +71,7 @@ public struct LumaWidgetEntryView: View {
 // MARK: - Small Widget View (Ask Luma)
 
 struct SmallWidgetView: View {
+    @Environment(\.colorScheme) var colorScheme
     let snapshot: LumaWidgetSnapshot
 
     var body: some View {
@@ -89,7 +90,7 @@ struct SmallWidgetView: View {
 
                     Text("Luma AI")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
 
                     Spacer()
 
@@ -105,24 +106,28 @@ struct SmallWidgetView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.6))
+                        .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.6) : Color(hex: "#777783"))
 
                     Text(snapshot.isAuthenticated ? "Ask anything…" : "Sign In to Luma")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
                         .lineLimit(1)
 
                     Spacer()
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color.white.opacity(0.12))
+                .background(colorScheme == .dark ? Color.white.opacity(0.12) : Color(hex: "#F4F4FA"))
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color(hex: "#EAEAFA"), lineWidth: 1)
+                )
 
                 // Bottom Tagline
                 Text(snapshot.isAuthenticated ? "Tap to chat with AI" : "Tap to sign in")
                     .font(.system(size: 11))
-                    .foregroundColor(Color.white.opacity(0.55))
+                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
             }
             .padding(14)
         }
@@ -133,6 +138,7 @@ struct SmallWidgetView: View {
 // MARK: - Medium Widget View (Quick Actions)
 
 struct MediumWidgetView: View {
+    @Environment(\.colorScheme) var colorScheme
     let snapshot: LumaWidgetSnapshot
 
     var body: some View {
@@ -151,7 +157,7 @@ struct MediumWidgetView: View {
 
                     Text("Luma AI")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
                 }
 
                 Spacer()
@@ -163,11 +169,11 @@ struct MediumWidgetView: View {
 
                     Text(snapshot.isAuthenticated ? (snapshot.activePersonaName ?? "Ready") : "Guest")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.65))
+                        .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.65) : Color(hex: "#777783"))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(Color.white.opacity(0.08))
+                .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "#F4F4FA"))
                 .clipShape(Capsule())
             }
 
@@ -244,22 +250,22 @@ struct MediumWidgetView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
                         .lineLimit(1)
 
                     Text(subtitle)
                         .font(.system(size: 9.5))
-                        .foregroundColor(Color.white.opacity(0.55))
+                        .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
                         .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(9)
-            .background(Color.white.opacity(0.08))
+            .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "#F4F4FA"))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                    .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color(hex: "#EAEAFA"), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -269,6 +275,7 @@ struct MediumWidgetView: View {
 // MARK: - Large Widget View (Luma Dashboard)
 
 struct LargeWidgetView: View {
+    @Environment(\.colorScheme) var colorScheme
     let snapshot: LumaWidgetSnapshot
 
     var body: some View {
@@ -288,11 +295,11 @@ struct LargeWidgetView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Luma AI")
                             .font(.system(size: 15, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
 
                         Text(snapshot.isAuthenticated ? (snapshot.activePersonaName ?? "Intelligent Companion") : "Sign In Required")
                             .font(.system(size: 11))
-                            .foregroundColor(Color.white.opacity(0.55))
+                            .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
                     }
                 }
 
@@ -302,7 +309,7 @@ struct LargeWidgetView: View {
                     Text(emoji)
                         .font(.system(size: 18))
                         .padding(6)
-                        .background(Color.white.opacity(0.08))
+                        .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "#F4F4FA"))
                         .clipShape(Circle())
                 }
             }
@@ -325,29 +332,29 @@ struct LargeWidgetView: View {
                             if let prompt = snapshot.recentPromptTitle, !prompt.isEmpty {
                                 Text(prompt)
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
                                     .lineLimit(2)
 
                                 Text("Tap to resume conversation in Luma AI")
                                     .font(.system(size: 11))
-                                    .foregroundColor(Color.white.opacity(0.55))
+                                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
                             } else if snapshot.isAuthenticated {
                                 Text("Ask your intelligent companion anything")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
 
                                 Text("Draft ideas, brainstorm, review code, or explore thoughts")
                                     .font(.system(size: 11))
-                                    .foregroundColor(Color.white.opacity(0.55))
+                                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
                                     .lineLimit(1)
                             } else {
                                 Text("Sign in to sync recent conversations")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
 
                                 Text("Unlock full AI chat, voice assistant, and visual creativity")
                                     .font(.system(size: 11))
-                                    .foregroundColor(Color.white.opacity(0.55))
+                                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.55) : Color(hex: "#777783"))
                                     .lineLimit(1)
                             }
                         }
@@ -356,15 +363,15 @@ struct LargeWidgetView: View {
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color.white.opacity(0.35))
+                            .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.35) : Color(hex: "#777783"))
                             .padding(.top, 4)
                     }
                     .padding(12)
-                    .background(Color.white.opacity(0.08))
+                    .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "#F4F4FA"))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                            .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color(hex: "#EAEAFA"), lineWidth: 1)
                     )
                 }
             }
@@ -375,7 +382,7 @@ struct LargeWidgetView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("QUICK ACTIONS")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color.white.opacity(0.6))
+                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.6) : Color(hex: "#777783"))
                     .tracking(0.5)
 
                 HStack(spacing: 8) {
@@ -437,22 +444,22 @@ struct LargeWidgetView: View {
 
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .white : Color(hex: "#19191D"))
                     .lineLimit(1)
 
                 Text(subtitle)
                     .font(.system(size: 9.5))
-                    .foregroundColor(Color.white.opacity(0.5))
+                    .foregroundColor(colorScheme == .dark ? Color.white.opacity(0.5) : Color(hex: "#777783"))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .padding(.horizontal, 4)
-            .background(Color.white.opacity(0.08))
+            .background(colorScheme == .dark ? Color.white.opacity(0.08) : Color(hex: "#F4F4FA"))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                    .stroke(colorScheme == .dark ? Color.white.opacity(0.06) : Color(hex: "#EAEAFA"), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -529,10 +536,20 @@ private extension View {
     func widgetBackground() -> some View {
         if #available(iOS 17.0, *) {
             self.containerBackground(for: .widget) {
-                Color(hex: "#121216")
+                Color(uiColor: UIColor { traits in
+                    traits.userInterfaceStyle == .dark
+                        ? UIColor(red: 18/255, green: 18/255, blue: 22/255, alpha: 1)
+                        : UIColor(red: 248/255, green: 248/255, blue: 252/255, alpha: 1)
+                })
             }
         } else {
-            self.background(Color(hex: "#121216"))
+            self.background(
+                Color(uiColor: UIColor { traits in
+                    traits.userInterfaceStyle == .dark
+                        ? UIColor(red: 18/255, green: 18/255, blue: 22/255, alpha: 1)
+                        : UIColor(red: 248/255, green: 248/255, blue: 252/255, alpha: 1)
+                })
+            )
         }
     }
 }

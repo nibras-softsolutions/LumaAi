@@ -72,14 +72,112 @@ function apiUrl(endpoint) {
   return base ? `${base}${cleanEndpoint}` : cleanEndpoint;
 }
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
+}
+
+let activeSigningKey = null;
+
+async function getSigningKey() {
+  if (activeSigningKey && new Date(activeSigningKey.expires_at) > new Date(Date.now() + 60000)) {
+    return activeSigningKey;
+  }
+  try {
+    const res = await fetch(apiUrl("/api/auth/signing-key"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Accept": "application/json" }
+    });
+    if (res.ok) {
+      activeSigningKey = await res.json();
+      return activeSigningKey;
+    }
+  } catch (err) {
+    console.debug("[Security] Unable to fetch signing key:", err);
+  }
+  return null;
+}
+
+async function signRequest(method, endpoint, bodyData) {
+  try {
+    const key = await getSigningKey();
+    if (!key || !window.crypto || !window.crypto.subtle) return {};
+
+    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = (window.crypto.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36));
+
+    let bodyText = "";
+    if (typeof bodyData === "string") {
+      bodyText = bodyData;
+    } else if (bodyData) {
+      bodyText = JSON.stringify(bodyData);
+    }
+
+    const encoder = new TextEncoder();
+    const bodyBuffer = encoder.encode(bodyText);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", bodyBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const bodyHash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const canonical = `${method.toUpperCase()}\n${cleanEndpoint}\n${timestamp}\n${nonce}\n${bodyHash}`;
+
+    const keyBuffer = encoder.encode(key.signing_secret);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyBuffer,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sigBuffer = await crypto.subtle.sign("HMAC", cryptoKey, encoder.encode(canonical));
+    const sigArray = Array.from(new Uint8Array(sigBuffer));
+    const signature = sigArray.map(b => b.toString(16).padStart(2, "0")).join("");
+
+    return {
+      "X-Signature": signature,
+      "X-Timestamp": timestamp,
+      "X-Nonce": nonce,
+      "X-Key-Id": key.key_id
+    };
+  } catch (e) {
+    console.debug("[Security] Request signing error:", e);
+    return {};
+  }
+}
+
 async function apiFetch(endpoint, options = {}) {
   const isCrossOrigin = Boolean(getApiBaseUrl());
+  const method = (options.method || "GET").toUpperCase();
+  const headers = { ...options.headers };
+
+  // 1. Double-submit CSRF cookie check for state-changing calls
+  if (method !== "GET" && method !== "HEAD") {
+    const csrfToken = getCookie("luma_csrf_token");
+    if (csrfToken && !headers["X-CSRF-Token"]) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+  }
+
+  // 2. HMAC request signing for sensitive authenticated state-changing calls
+  const sensitiveEndpoints = [
+    "/api/user/profile",
+    "/api/user/profile/photo",
+    "/api/chat/conversations"
+  ];
+  const isSensitive = sensitiveEndpoints.some(p => endpoint.includes(p)) && (method === "PUT" || method === "POST" || method === "DELETE");
+  if (isSensitive && authenticatedUser && !headers["X-Signature"]) {
+    const sigHeaders = await signRequest(method, endpoint, options.body);
+    Object.assign(headers, sigHeaders);
+  }
+
   return fetch(apiUrl(endpoint), {
     credentials: options.credentials || (isCrossOrigin ? "include" : "same-origin"),
     ...options,
-    headers: {
-      ...options.headers,
-    },
+    headers,
   });
 }
 
@@ -1632,6 +1730,7 @@ async function logout() {
     return;
   }
   authenticatedUser = null;
+  activeSigningKey = null;
   conversations = [];
   currentConversation = makeConversation();
   messageNodes.clear();
@@ -1675,6 +1774,7 @@ function handleSessionExpired() {
   if (activeGeneration) activeGeneration.controller.abort();
   activeGeneration = null;
   authenticatedUser = null;
+  activeSigningKey = null;
   conversations = [];
   currentConversation = makeConversation();
   messageNodes.clear();
@@ -3735,5 +3835,79 @@ if (ocrScanButton && ocrFileInput) {
   });
 }
 
+// Theme Management (System, Light, Dark)
+const THEME_STORAGE_KEY = "luma_theme";
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) || "system";
+  } catch {
+    return "system";
+  }
+}
+
+function applyTheme(choice) {
+  const root = document.documentElement;
+  const isDarkSystem = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const effectiveTheme = choice === "system" ? (isDarkSystem ? "dark" : "light") : choice;
+
+  root.setAttribute("data-theme", effectiveTheme);
+  root.setAttribute("data-theme-setting", choice);
+
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) {
+    metaThemeColor.setAttribute("content", effectiveTheme === "dark" ? "#121214" : "#faf9f6");
+  }
+
+  document.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+    const isSelected = btn.getAttribute("data-theme-choice") === choice;
+    btn.classList.toggle("active", isSelected);
+    btn.setAttribute("aria-checked", isSelected ? "true" : "false");
+  });
+
+  const themeToggle = document.querySelector("#themeToggleButton");
+  if (themeToggle) {
+    const nextThemeLabel = effectiveTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    themeToggle.setAttribute("aria-label", nextThemeLabel);
+    themeToggle.setAttribute("title", nextThemeLabel);
+  }
+}
+
+function initTheme() {
+  const current = getStoredTheme();
+  applyTheme(current);
+
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (getStoredTheme() === "system") {
+        applyTheme("system");
+      }
+    });
+  }
+
+  const themeToggle = document.querySelector("#themeToggleButton");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const activeAttr = document.documentElement.getAttribute("data-theme") || "light";
+      const nextChoice = activeAttr === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, nextChoice);
+      } catch {}
+      applyTheme(nextChoice);
+    });
+  }
+
+  document.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const choice = btn.getAttribute("data-theme-choice") || "system";
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, choice);
+      } catch {}
+      applyTheme(choice);
+    });
+  });
+}
+
+initTheme();
 window.addEventListener("popstate", handleExperiencePopState);
 initializeExperience();

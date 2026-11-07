@@ -212,7 +212,7 @@ public struct ChatView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(Color.orbixPrimaryText)
                     .frame(width: 38, height: 38)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Color.orbixCardBorder, lineWidth: 1))
                     .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
@@ -228,7 +228,7 @@ public struct ChatView: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Color.orbixPrimaryText)
                     .frame(width: 38, height: 38)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Color.orbixCardBorder, lineWidth: 1))
                     .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
@@ -302,7 +302,7 @@ public struct ChatView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color.white)
+            .background(Color.lumaSurface)
             .clipShape(Capsule())
             .overlay(
                 Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)

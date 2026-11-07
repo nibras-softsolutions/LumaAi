@@ -68,7 +68,7 @@ public struct EditProfileView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(.settingsPrimaryText)
                                 .padding(14)
-                                .background(Color.white)
+                                .background(Color.settingsCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -85,7 +85,7 @@ public struct EditProfileView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(.settingsPrimaryText)
                                 .padding(14)
-                                .background(Color.white)
+                                .background(Color.settingsCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -129,12 +129,12 @@ public struct EditProfileView: View {
                     }) {
                         if isSaving {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .progressViewStyle(CircularProgressViewStyle(tint: Color.lumaInversePrimaryText))
                                 .frame(width: 48, height: 28)
                         } else {
                             Text("Save")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(Color.lumaInversePrimaryText)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 6)
                         }
@@ -210,7 +210,7 @@ public struct EditProfileView: View {
                     .foregroundColor(.settingsPrimaryText)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(Color.white)
+                    .background(Color.settingsCard)
                     .clipShape(Capsule())
                     .overlay(
                         Capsule().stroke(Color.settingsDivider, lineWidth: 1)
@@ -228,7 +228,7 @@ public struct EditProfileView: View {
                             .foregroundColor(.settingsSecondaryText)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(Color.white.opacity(0.8))
+                            .background(Color.settingsCard.opacity(0.85))
                             .clipShape(Capsule())
                     }
                 }
@@ -283,7 +283,7 @@ public struct EditProfileView: View {
                         Text(emoji)
                             .font(.system(size: 24))
                             .frame(width: 44, height: 44)
-                            .background(isSelected ? Color.white : Color.clear)
+                            .background(isSelected ? Color.settingsCard : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -293,7 +293,7 @@ public struct EditProfileView: View {
                 }
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.settingsCard)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -320,7 +320,7 @@ public struct EditProfileView: View {
                             .frame(width: 34, height: 34)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.white, lineWidth: isSelected ? 2.5 : 0)
+                                    .stroke(Color.settingsCard, lineWidth: isSelected ? 2.5 : 0)
                             )
                             .overlay(
                                 Circle()
@@ -331,7 +331,7 @@ public struct EditProfileView: View {
                 Spacer()
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.settingsCard)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)

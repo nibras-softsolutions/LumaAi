@@ -32,6 +32,7 @@ final class APIEndpointTests: XCTestCase {
         XCTAssertEqual(APIEndpoint.deleteConversation(id: "123").url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/chat/conversations/123")
         XCTAssertEqual(APIEndpoint.clearAllConversations.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/chat/conversations")
         XCTAssertEqual(APIEndpoint.syncConversations.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/chat/sync")
+        XCTAssertEqual(APIEndpoint.signingKey.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/auth/signing-key")
     }
 
     func testEndpointHTTPMethods() {
@@ -55,5 +56,6 @@ final class APIEndpointTests: XCTestCase {
         XCTAssertEqual(APIEndpoint.deleteConversation(id: "123").httpMethod, "DELETE")
         XCTAssertEqual(APIEndpoint.clearAllConversations.httpMethod, "DELETE")
         XCTAssertEqual(APIEndpoint.syncConversations.httpMethod, "POST")
+        XCTAssertEqual(APIEndpoint.signingKey.httpMethod, "POST")
     }
 }

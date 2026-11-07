@@ -19,9 +19,9 @@ from uuid import uuid4
 
 import bleach
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
@@ -34,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from auth import (
     ALLOWED_ORIGINS,
     User,
+    _validate_image_magic_bytes,
     engine as auth_engine,
     initialize_database,
     require_user,
@@ -369,7 +370,30 @@ markdown = MarkdownIt("commonmark", {"html": False, "linkify": False})
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    is_prod = bool(
+        os.getenv("RENDER")
+        or os.getenv("VERCEL")
+        or os.getenv("ENVIRONMENT") == "production"
+        or os.getenv("FORCE_HTTPS") == "true"
+    )
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+
+    # In production, reject or redirect plaintext HTTP traffic
+    if is_prod and forwarded_proto == "http":
+        if request.method in {"GET", "HEAD"}:
+            secure_url = request.url.replace(scheme="https")
+            return RedirectResponse(url=str(secure_url), status_code=status.HTTP_308_PERMANENT_REDIRECT)
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Insecure HTTP requests are rejected in production. Please use HTTPS."},
+        )
+
     response = await call_next(request)
+
+    # Attach HSTS header on production or HTTPS connections
+    if is_prod or request.url.scheme == "https" or forwarded_proto == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+
     connect_sources = " ".join(
         ["'self'"] + sorted(ALLOWED_ORIGINS) + ["https://*.vercel.app", "https://accounts.google.com"]
     )
@@ -387,7 +411,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(self), geolocation=()"
+        "camera=(self), microphone=(self), geolocation=()"
     )
     return response
 
@@ -941,6 +965,11 @@ async def extract_text_from_image(
         image_bytes = base64.b64decode(raw_data)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 image data.")
+
+    if len(image_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image file too large (max 5MB).")
+
+    _validate_image_magic_bytes(image_bytes)
 
     vision_key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or HOSTED_API_KEY
     vision_base = os.getenv("OPENAI_BASE_URL") or (

@@ -106,7 +106,7 @@ public struct UserProfileAvatarView: View {
         } else {
             // Priority 4: Default silhouette
             Circle()
-                .fill(Color.white)
+                .fill(Color.lumaSurface)
                 .overlay(
                     Circle()
                         .stroke(Color.orbixCardBorder, lineWidth: 1)

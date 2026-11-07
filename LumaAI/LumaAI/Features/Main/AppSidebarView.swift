@@ -91,7 +91,7 @@ public struct AppSidebarView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -230,7 +230,7 @@ public struct AppSidebarView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(Color.orbixPrimaryText)
                     .frame(width: 36, height: 36)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(Circle())
                     .overlay(
                         Circle().stroke(Color.orbixCardBorder, lineWidth: 1)
@@ -299,7 +299,7 @@ public struct AppSidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(isCurrent ? Color.white : Color.clear)
+            .background(isCurrent ? Color.lumaSurface : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -347,7 +347,7 @@ public struct AppSidebarView: View {
                     .font(.system(size: 15))
                     .foregroundColor(Color.orbixSecondaryText)
                     .frame(width: 32, height: 32)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(Circle())
                     .overlay(
                         Circle().stroke(Color.orbixCardBorder, lineWidth: 1)

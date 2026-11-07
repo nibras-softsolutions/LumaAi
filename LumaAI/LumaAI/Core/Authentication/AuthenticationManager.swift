@@ -204,6 +204,7 @@ public final class AuthenticationManager: ObservableObject {
 
     private func clearStoredSession() {
         keychain.delete(for: userCacheKey)
+        APIClient.shared.clearSessionToken()
         UserDefaults.standard.removeObject(forKey: "luma_session_token")
         if let cookies = HTTPCookieStorage.shared.cookies {
             for cookie in cookies {

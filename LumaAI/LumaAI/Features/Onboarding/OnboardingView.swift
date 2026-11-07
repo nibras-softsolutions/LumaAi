@@ -40,7 +40,7 @@ public struct OnboardingView: View {
                             .foregroundColor(Color.orbixPrimaryText)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
-                            .background(Color.white.opacity(0.8))
+                            .background(Color.lumaSurface.opacity(0.85))
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
@@ -76,7 +76,7 @@ public struct OnboardingView: View {
                             .foregroundColor(Color.orbixSecondaryText)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(Color.white.opacity(0.85))
+                            .background(Color.lumaSurface.opacity(0.85))
                             .clipShape(Capsule())
                             .overlay(
                                 Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
@@ -210,7 +210,7 @@ public struct OnboardingView: View {
                                 .font(.system(size: 10.5, weight: .regular))
                                 .foregroundColor(Color.orbixPrimaryText)
                                 .padding(10)
-                                .background(Color.white)
+                                .background(Color.lumaSurface)
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 3)
                         }
@@ -221,11 +221,11 @@ public struct OnboardingView: View {
                     Spacer()
                 }
                 .frame(width: 210, height: 230)
-                .background(Color(red: 246/255, green: 246/255, blue: 252/255))
+                .background(Color.lumaSurfaceElevated)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color.white, lineWidth: 3)
+                        .stroke(Color.orbixCardBorder, lineWidth: 1.5)
                 )
                 .shadow(color: Color.black.opacity(0.09), radius: 20, x: 0, y: 10)
 
@@ -240,7 +240,7 @@ public struct OnboardingView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.lumaSurface)
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                 .offset(x: 75, y: -90)
@@ -256,7 +256,7 @@ public struct OnboardingView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.lumaSurface)
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                 .offset(x: -75, y: 85)
@@ -340,7 +340,7 @@ public struct OnboardingView: View {
                             .padding(.top, 2)
                         }
                         .padding(14)
-                        .background(Color.white)
+                        .background(Color.lumaSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -363,7 +363,7 @@ public struct OnboardingView: View {
                 // Floating Sparkle Badge (Top Right)
                 ZStack {
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color.lumaSurface)
                         .frame(width: 44, height: 44)
                         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
                     Image(systemName: "sparkles")
@@ -451,7 +451,7 @@ public struct OnboardingView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white, lineWidth: 3)
+                        .stroke(Color.orbixCardBorder, lineWidth: 1.5)
                 )
                 .shadow(color: Color.black.opacity(0.12), radius: 20, x: 0, y: 10)
 
@@ -466,7 +466,7 @@ public struct OnboardingView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.lumaSurface)
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                 .offset(x: -75, y: -95)
@@ -482,7 +482,7 @@ public struct OnboardingView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white)
+                .background(Color.lumaSurface)
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
                 .offset(x: 75, y: 95)
@@ -520,7 +520,7 @@ public struct OnboardingView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white)
+        .background(Color.lumaSurface)
         .clipShape(Capsule())
         .overlay(
             Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
@@ -537,6 +537,8 @@ public struct OnboardingView: View {
 
 // MARK: - Orbix Studio Background View
 public struct OrbixBackgroundView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     public init() {}
 
     public var body: some View {
@@ -555,10 +557,14 @@ public struct OrbixBackgroundView: View {
                 }
                 .fill(
                     LinearGradient(
-                        colors: [
+                        colors: colorScheme == .dark ? [
+                            Color.orbixLavender.opacity(0.18),
+                            Color.orbixLavenderSoft.opacity(0.24),
+                            Color.orbixLavender.opacity(0.10)
+                        ] : [
                             Color.orbixLavender.opacity(0.35),
                             Color.orbixLavenderSoft.opacity(0.55),
-                            Color.orbixLavender.opacity(0.2)
+                            Color.orbixLavender.opacity(0.20)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing

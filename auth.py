@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import hmac
 import io
 import logging
 import os
@@ -22,6 +23,8 @@ load_dotenv()
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pwdlib import PasswordHash
+from pwdlib.hashers.bcrypt import BcryptHasher
+from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
@@ -193,8 +196,14 @@ if os.getenv("FRONTEND_URL"):
 
 engine = create_async_engine(DATABASE_URL, connect_args=engine_connect_args, pool_pre_ping=True)
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
-password_hasher = PasswordHash.recommended()
+password_hasher = PasswordHash((BcryptHasher(rounds=12), Argon2Hasher()))
 DUMMY_PASSWORD_HASH = password_hasher.hash(secrets.token_urlsafe(32))
+
+_seen_nonces: dict[str, float] = {}
+_signing_keys_cache: dict[str, tuple[str, str, datetime]] = {}
+NONCE_EXPIRATION_SECONDS = 300
+CSRF_COOKIE = "luma_csrf_token"
+
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
@@ -287,6 +296,20 @@ class LoginAttempt(Base):
     email_digest: Mapped[str] = mapped_column(String(64), primary_key=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False)
     window_started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class SigningKeyModel(Base):
+    __tablename__ = "signing_keys"
+
+    key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
 
 class RegisterRequest(BaseModel):
@@ -443,6 +466,16 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite=samesite,
         path="/",
     )
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=CSRF_COOKIE,
+        value=csrf_token,
+        max_age=int(SESSION_LIFETIME.total_seconds()),
+        httponly=False,
+        secure=secure,
+        samesite=samesite,
+        path="/",
+    )
 
 
 def _clear_session_cookie(response: Response) -> None:
@@ -454,6 +487,181 @@ def _clear_session_cookie(response: Response) -> None:
         samesite=samesite,
         path="/",
     )
+    response.delete_cookie(
+        key=CSRF_COOKIE,
+        httponly=False,
+        secure=secure,
+        samesite=samesite,
+        path="/",
+    )
+
+
+def _verify_csrf(request: Request) -> None:
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    _ensure_same_origin(request)
+    if SESSION_COOKIE in request.cookies:
+        csrf_cookie = request.cookies.get(CSRF_COOKIE)
+        csrf_header = request.headers.get("x-csrf-token")
+        if csrf_header:
+            if not csrf_cookie or not hmac.compare_digest(csrf_cookie, csrf_header):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="CSRF token validation failed.",
+                )
+
+
+def _prune_nonces_and_keys():
+    now_ts = _utcnow().timestamp()
+    expired_nonces = [n for n, ts in _seen_nonces.items() if now_ts - ts > NONCE_EXPIRATION_SECONDS]
+    for n in expired_nonces:
+        _seen_nonces.pop(n, None)
+
+    now_dt = _utcnow()
+    expired_keys = [k for k, (_, _, exp) in _signing_keys_cache.items() if exp <= now_dt]
+    for k in expired_keys:
+        _signing_keys_cache.pop(k, None)
+
+
+def _revoke_user_signing_keys(user_id: str):
+    to_remove = [k for k, (uid, _, _) in _signing_keys_cache.items() if uid == user_id]
+    for k in to_remove:
+        _signing_keys_cache.pop(k, None)
+
+
+def _validate_image_magic_bytes(data: bytes) -> str:
+    if len(data) < 12:
+        raise HTTPException(status_code=400, detail="File too small to be a valid image.")
+    if data.startswith(b"\xFF\xD8\xFF"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid file type. Only JPEG, PNG, and WebP images are permitted.",
+    )
+
+
+def compute_request_signature(
+    secret: str,
+    method: str,
+    path: str,
+    timestamp: str | int,
+    nonce: str,
+    body: bytes | str | None = None,
+) -> str:
+    if isinstance(body, str):
+        body_bytes = body.encode("utf-8")
+    elif body is None:
+        body_bytes = b""
+    else:
+        body_bytes = body
+
+    body_hash = hashlib.sha256(body_bytes).hexdigest()
+    canonical = f"{method.upper()}\n{path}\n{str(timestamp)}\n{nonce}\n{body_hash}"
+    return hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+async def verify_request_signature(
+    request: Request,
+    user: User,
+    required: bool = False,
+) -> tuple[str, str] | None:
+    signature = request.headers.get("x-signature")
+    timestamp_str = request.headers.get("x-timestamp")
+    nonce = request.headers.get("x-nonce")
+    key_id = request.headers.get("x-key-id")
+
+    if not signature and not timestamp_str and not nonce and not key_id:
+        if not required:
+            return None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request integrity signature required. Missing X-Signature, X-Timestamp, X-Nonce, or X-Key-Id.",
+        )
+
+    if not (signature and timestamp_str and nonce and key_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incomplete request integrity headers. X-Signature, X-Timestamp, X-Nonce, and X-Key-Id are all required.",
+        )
+
+    _prune_nonces_and_keys()
+
+    try:
+        if timestamp_str.isdigit() or (timestamp_str.startswith("-") and timestamp_str[1:].isdigit()):
+            ts = float(timestamp_str)
+        else:
+            ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid X-Timestamp header format.",
+        )
+
+    now_ts = _utcnow().timestamp()
+    if abs(now_ts - ts) > NONCE_EXPIRATION_SECONDS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Request signature timestamp expired or skewed beyond tolerance (max 300s).",
+        )
+
+    if nonce in _seen_nonces:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Replay attack detected: nonce has already been used.",
+        )
+
+    secret: str | None = None
+    if key_id in _signing_keys_cache:
+        k_user_id, k_secret, k_exp = _signing_keys_cache[key_id]
+        if k_user_id == user.id and k_exp > _utcnow():
+            secret = k_secret
+
+    if secret is None:
+        async with SessionFactory() as db:
+            db_key = await db.get(SigningKeyModel, key_id)
+            if db_key and db_key.user_id == user.id and db_key.expires_at > _utcnow():
+                secret = db_key.secret
+                _signing_keys_cache[key_id] = (db_key.user_id, db_key.secret, db_key.expires_at)
+
+    if secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Signing key is invalid, expired, or revoked.",
+        )
+
+    body_bytes = await request.body()
+    body_hash = hashlib.sha256(body_bytes).hexdigest()
+    canonical = f"{request.method.upper()}\n{request.url.path}\n{timestamp_str}\n{nonce}\n{body_hash}"
+
+    expected_sig = hmac.new(
+        secret.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature.lower(), expected_sig.lower()):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid request signature. Request tampering detected.",
+        )
+
+    _seen_nonces[nonce] = now_ts
+    return key_id, secret
+
+
+def sign_response(response: Response, secret: str, nonce: str) -> None:
+    now_ts = str(int(_utcnow().timestamp()))
+    body_bytes = getattr(response, "body", b"")
+    body_hash = hashlib.sha256(body_bytes).hexdigest()
+    canonical = f"RESPONSE\n{now_ts}\n{nonce}\n{body_hash}"
+    sig = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    response.headers["X-Response-Timestamp"] = now_ts
+    response.headers["X-Response-Nonce"] = nonce
+    response.headers["X-Response-Signature"] = sig
 
 
 async def initialize_database() -> None:
@@ -492,8 +700,12 @@ async def initialize_database() -> None:
 
 async def require_user(request: Request) -> User:
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
-        _ensure_same_origin(request)
+        _verify_csrf(request)
     token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -658,6 +870,12 @@ async def google_login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google account does not contain a verified email address.",
         )
+    email_verified = idinfo.get("email_verified")
+    if email_verified is not None and str(email_verified).lower() not in {"true", "1"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google account email is not verified.",
+        )
     email = email.strip().casefold()
     full_name = idinfo.get("name") or email.split("@")[0]
     full_name = " ".join(full_name.split())[:100]
@@ -712,12 +930,14 @@ async def login(
         else:
             user = await db.scalar(select(User).where(User.email == data.email))
             stored_hash = user.password_hash if user else DUMMY_PASSWORD_HASH
-            password_matches = await asyncio.to_thread(
-                password_hasher.verify,
+            valid, new_hash = await asyncio.to_thread(
+                password_hasher.verify_and_update,
                 data.password,
                 stored_hash,
             )
-            if user and password_matches:
+            if user and valid:
+                if new_hash:
+                    user.password_hash = new_hash
                 if attempt:
                     await db.delete(attempt)
                 token = await _add_session(db, user.id)
@@ -765,14 +985,52 @@ async def forgot_password(data: ForgotPasswordRequest) -> dict:
 async def logout(request: Request) -> Response:
     _ensure_same_origin(request)
     token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
     if token:
         async with SessionFactory.begin() as db:
             session = await db.get(AuthSession, _token_hash(token))
             if session:
+                user_id = session.user_id
                 await db.delete(session)
+                await db.execute(delete(SigningKeyModel).where(SigningKeyModel.user_id == user_id))
+                _revoke_user_signing_keys(user_id)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_session_cookie(response)
     return response
+
+
+class SigningKeyResponse(BaseModel):
+    key_id: str
+    signing_secret: str
+    expires_at: str
+    algorithm: str = "HMAC-SHA256"
+
+
+@router.post("/signing-key", response_model=SigningKeyResponse)
+async def obtain_signing_key(user: User = Depends(require_user)) -> dict:
+    key_id = f"key_{uuid4().hex}"
+    secret = secrets.token_hex(32)
+    expires_at = _utcnow() + timedelta(hours=24)
+    async with SessionFactory.begin() as db:
+        db.add(
+            SigningKeyModel(
+                key_id=key_id,
+                user_id=user.id,
+                secret=secret,
+                created_at=_utcnow(),
+                expires_at=expires_at,
+            )
+        )
+    _signing_keys_cache[key_id] = (user.id, secret, expires_at)
+    return {
+        "key_id": key_id,
+        "signing_secret": secret,
+        "expires_at": expires_at.isoformat(),
+        "algorithm": "HMAC-SHA256",
+    }
 
 
 user_router = APIRouter(prefix="/api/user", tags=["user"])
@@ -791,8 +1049,11 @@ async def get_user_profile(user: User = Depends(require_user)) -> User:
 @user_router.put("/profile", response_model=UserResponse)
 async def update_user_profile(
     data: UpdateProfileRequest,
+    request: Request,
+    response: Response,
     user: User = Depends(require_user),
 ) -> User:
+    key_info = await verify_request_signature(request, user, required=False)
     async with SessionFactory.begin() as db:
         db_user = await db.get(User, user.id)
         if db_user is None:
@@ -814,6 +1075,8 @@ async def update_user_profile(
                 db_user.profile_image_url = clean_url if clean_url else None
         db_user.updated_at = _utcnow()
         await db.flush()
+        if key_info:
+            sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
         return db_user
 
 
@@ -855,8 +1118,14 @@ async def get_user_avatar(user_id: str) -> Response:
 @user_router.post("/profile/photo", response_model=UserResponse)
 async def upload_profile_photo(
     payload: UploadPhotoPayload,
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     user: User = Depends(require_user),
 ) -> User:
+    key_info = None
+    if request is not None:
+        key_info = await verify_request_signature(request, user, required=False)
+
     raw_data = payload.image.strip()
     if not raw_data:
         raise HTTPException(status_code=400, detail="Image data is required.")
@@ -871,6 +1140,9 @@ async def upload_profile_photo(
 
     if len(image_bytes) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image file too large (max 5MB).")
+
+    _validate_image_magic_bytes(image_bytes)
+    Image.MAX_IMAGE_PIXELS = 10_000_000
 
     try:
         img = Image.open(io.BytesIO(image_bytes))
@@ -912,12 +1184,22 @@ async def upload_profile_photo(
         db_user.profile_image_url = profile_url
         db_user.updated_at = _utcnow()
         await db.flush()
+        if key_info and response is not None and request is not None:
+            sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
         return db_user
 
 
 @router.delete("/profile/photo", response_model=UserResponse)
 @user_router.delete("/profile/photo", response_model=UserResponse)
-async def delete_profile_photo(user: User = Depends(require_user)) -> User:
+async def delete_profile_photo(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+    user: User = Depends(require_user),
+) -> User:
+    key_info = None
+    if request is not None:
+        key_info = await verify_request_signature(request, user, required=False)
+
     for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
         try:
             old_file.unlink(missing_ok=True)
@@ -930,25 +1212,24 @@ async def delete_profile_photo(user: User = Depends(require_user)) -> User:
             raise HTTPException(status_code=404, detail="User not found.")
         db_user.profile_image_data = None
         db_user.profile_image_url = None
-        db_user.profile_image_data = None
         db_user.updated_at = _utcnow()
         await db.flush()
-        return db_user
-
-    async with SessionFactory.begin() as db:
-        db_user = await db.get(User, user.id)
-        if db_user is None:
-            raise HTTPException(status_code=404, detail="User not found.")
-        db_user.profile_image_url = None
-        db_user.profile_image_data = None
-        db_user.updated_at = _utcnow()
-        await db.flush()
+        if key_info and response is not None and request is not None:
+            sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
         return db_user
 
 
 @router.delete("/profile", response_model=UserResponse)
 @user_router.delete("/profile", response_model=UserResponse)
-async def reset_profile(user: User = Depends(require_user)) -> User:
+async def reset_profile(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+    user: User = Depends(require_user),
+) -> User:
+    key_info = None
+    if request is not None:
+        key_info = await verify_request_signature(request, user, required=False)
+
     for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
         try:
             old_file.unlink(missing_ok=True)
@@ -960,6 +1241,16 @@ async def reset_profile(user: User = Depends(require_user)) -> User:
         if db_user is None:
             raise HTTPException(status_code=404, detail="User not found.")
         db_user.custom_name = None
+        db_user.bio = None
+        db_user.avatar_emoji = None
+        db_user.avatar_color_hex = None
+        db_user.profile_image_data = None
+        db_user.profile_image_url = None
+        db_user.updated_at = _utcnow()
+        await db.flush()
+        if key_info and response is not None and request is not None:
+            sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
+        return db_user
         db_user.bio = None
         db_user.avatar_emoji = None
         db_user.avatar_color_hex = None
@@ -1213,11 +1504,20 @@ async def delete_conversation(conversation_id: str, user: User = Depends(require
 
 
 @chat_router.delete("/conversations")
-async def clear_all_conversations(user: User = Depends(require_user)) -> dict:
+async def clear_all_conversations(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
+    user: User = Depends(require_user),
+) -> dict:
     """Clear all conversations for the user from the database."""
+    key_info = None
+    if request is not None:
+        key_info = await verify_request_signature(request, user, required=False)
     async with SessionFactory.begin() as db:
         await db.execute(delete(ConversationModel).where(ConversationModel.user_id == user.id))
         await db.flush()
+    if key_info and response is not None and request is not None:
+        sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
     return {"status": "cleared"}
 
 

@@ -76,12 +76,14 @@ public struct LumaButton: View {
     private var foregroundColor: Color {
         switch style {
         case .primary:
-            return .white
+            return .lumaInversePrimaryText
         case .secondary:
             return .lumaPrimaryText
         case .destructive:
             return .lumaError
         case .ghost:
+
+        
             return .lumaPrimaryText
         }
     }

@@ -1,4 +1,6 @@
 import Foundation
+import Security
+import CryptoKit
 
 public struct SyncConversationsRequest: Codable {
     public let conversations: [Conversation]
@@ -9,6 +11,104 @@ public struct SyncConversationsRequest: Codable {
 
 public struct EmptyResponse: Codable {
     public init() {}
+}
+
+public struct SigningCredentials {
+    public let keyId: String
+    public let secret: String
+    public let expiresAt: Date
+}
+
+public final class SSLPinningDelegate: NSObject, URLSessionDelegate {
+    public static let shared = SSLPinningDelegate()
+
+    // Production pinned Subject Public Key Info (SPKI) SHA-256 hashes
+    public static let pinnedSPKIHashes: Set<String> = [
+        // Primary Leaf (*.onrender.com)
+        "8emdl/UmneUm0I4Y/vHzOTQzb9eJwG4voRHtMdNmBPk=",
+        // Primary Leaf raw SecKey SHA-256
+        "ijMkQSEhL0wPUZ3LK8PXw3fp5E6Y3eED6o4iGJ+nhMI=",
+        // Backup 1: Intermediate CA (WE1 Google Trust Services)
+        "kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=",
+        // Backup 2: Root CA (GTS Root R4 Google Trust Services)
+        "mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=",
+        // Backup 3: ISRG Root X1 (Let's Encrypt Root)
+        "C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="
+    ]
+
+    // ASN.1 SubjectPublicKeyInfo header for ECDSA P-256 keys (secp256r1)
+    private static let p256SPKIHeader: [UInt8] = [
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
+        0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00
+    ]
+
+    public func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        let host = challenge.protectionSpace.host.lowercased()
+
+        #if DEBUG
+        if host == "localhost" || host == "127.0.0.1" {
+            var error: CFError?
+            if SecTrustEvaluateWithError(serverTrust, &error) {
+                completionHandler(.useCredential, URLCredential(trust: serverTrust))
+            } else {
+                completionHandler(.cancelAuthenticationChallenge, nil)
+            }
+            return
+        }
+        #endif
+
+        let policy = SecPolicyCreateSSL(true, host as CFString)
+        SecTrustSetPolicies(serverTrust, policy)
+
+        var evalError: CFError?
+        guard SecTrustEvaluateWithError(serverTrust, &evalError) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let certCount = SecTrustGetCertificateCount(serverTrust)
+        var hasMatchingPin = false
+
+        for i in 0..<certCount {
+            guard let cert = SecTrustGetCertificateAtIndex(serverTrust, i),
+                  let publicKey = SecCertificateCopyKey(cert),
+                  let keyData = SecKeyCopyExternalRepresentation(publicKey, nil) as Data? else {
+                continue
+            }
+
+            let rawKeyHash = Data(SHA256.hash(data: keyData)).base64EncodedString()
+            if Self.pinnedSPKIHashes.contains(rawKeyHash) {
+                hasMatchingPin = true
+                break
+            }
+
+            if keyData.count == 65 && keyData.first == 0x04 {
+                var spkiData = Data(Self.p256SPKIHeader)
+                spkiData.append(keyData)
+                let spkiHash = Data(SHA256.hash(data: spkiData)).base64EncodedString()
+                if Self.pinnedSPKIHashes.contains(spkiHash) {
+                    hasMatchingPin = true
+                    break
+                }
+            }
+        }
+
+        if hasMatchingPin {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+    }
 }
 
 public protocol APIClientProtocol: AnyObject {
@@ -141,12 +241,101 @@ public final class APIClient: APIClientProtocol {
             config.httpCookieAcceptPolicy = .always
             config.timeoutIntervalForRequest = 60.0
             config.timeoutIntervalForResource = 180.0
-            self.session = URLSession(configuration: config)
+            self.session = URLSession(configuration: config, delegate: SSLPinningDelegate.shared, delegateQueue: nil)
+        }
+    }
+
+    public func getStoredToken() -> String? {
+        if let token = KeychainHelper.shared.readString(for: "luma_session_token"), !token.isEmpty {
+            return token
+        }
+        if let legacy = UserDefaults.standard.string(forKey: "luma_session_token"), !legacy.isEmpty {
+            KeychainHelper.shared.saveString(legacy, for: "luma_session_token")
+            UserDefaults.standard.removeObject(forKey: "luma_session_token")
+            return legacy
+        }
+        return nil
+    }
+
+    public func saveSessionToken(_ token: String) {
+        KeychainHelper.shared.saveString(token, for: "luma_session_token")
+        UserDefaults.standard.removeObject(forKey: "luma_session_token")
+    }
+
+    public func clearSessionToken() {
+        KeychainHelper.shared.delete(for: "luma_session_token")
+        KeychainHelper.shared.delete(for: "luma_signing_key_id")
+        KeychainHelper.shared.delete(for: "luma_signing_secret")
+        KeychainHelper.shared.delete(for: "luma_signing_expires_at")
+        UserDefaults.standard.removeObject(forKey: "luma_session_token")
+        cachedSigningKey = nil
+    }
+
+    private var cachedSigningKey: SigningCredentials? = nil
+
+    public func obtainSigningKey() async throws -> SigningCredentials {
+        if let cached = cachedSigningKey, cached.expiresAt > Date().addingTimeInterval(60) {
+            return cached
+        }
+        if let keyId = KeychainHelper.shared.readString(for: "luma_signing_key_id"),
+           let secret = KeychainHelper.shared.readString(for: "luma_signing_secret"),
+           let expStr = KeychainHelper.shared.readString(for: "luma_signing_expires_at"),
+           let exp = ISO8601DateFormatter().date(from: expStr),
+           exp > Date().addingTimeInterval(60) {
+            let creds = SigningCredentials(keyId: keyId, secret: secret, expiresAt: exp)
+            self.cachedSigningKey = creds
+            return creds
+        }
+
+        struct KeyResponse: Decodable {
+            let key_id: String
+            let signing_secret: String
+            let expires_at: String
+            let algorithm: String
+        }
+
+        let res: KeyResponse = try await request(.signingKey, body: nil)
+        let expDate = ISO8601DateFormatter().date(from: res.expires_at) ?? Date().addingTimeInterval(86400)
+        let creds = SigningCredentials(keyId: res.key_id, secret: res.signing_secret, expiresAt: expDate)
+        self.cachedSigningKey = creds
+        KeychainHelper.shared.saveString(res.key_id, for: "luma_signing_key_id")
+        KeychainHelper.shared.saveString(res.signing_secret, for: "luma_signing_secret")
+        KeychainHelper.shared.saveString(res.expires_at, for: "luma_signing_expires_at")
+        return creds
+    }
+
+    public func signRequestIfNeeded(_ request: inout URLRequest, endpoint: APIEndpoint, bodyData: Data?) async {
+        switch endpoint {
+        case .updateUserProfile, .uploadProfilePhoto, .deleteProfilePhoto, .resetUserProfile, .clearAllConversations:
+            break
+        default:
+            return
+        }
+
+        do {
+            let creds = try await obtainSigningKey()
+            let timestamp = String(Int(Date().timeIntervalSince1970))
+            let nonce = UUID().uuidString
+            let bodyBytes = bodyData ?? Data()
+            let bodyHash = SHA256.hash(data: bodyBytes).map { String(format: "%02x", $0) }.joined()
+            let path = request.url?.path ?? ""
+            let canonical = "\(endpoint.httpMethod.uppercased())\n\(path)\n\(timestamp)\n\(nonce)\n\(bodyHash)"
+
+            let symmetricKey = SymmetricKey(data: Data(creds.secret.utf8))
+            let signature = HMAC<SHA256>.authenticationCode(for: Data(canonical.utf8), using: symmetricKey)
+            let sigHex = signature.map { String(format: "%02x", $0) }.joined()
+
+            request.setValue(sigHex, forHTTPHeaderField: "X-Signature")
+            request.setValue(timestamp, forHTTPHeaderField: "X-Timestamp")
+            request.setValue(nonce, forHTTPHeaderField: "X-Nonce")
+            request.setValue(creds.keyId, forHTTPHeaderField: "X-Key-Id")
+        } catch {
+            print("[APIClient] Signing request skipped or failed: \(error)")
         }
     }
 
     public func ensureSession() async throws {
-        let hasStoredToken = UserDefaults.standard.string(forKey: "luma_session_token") != nil
+        let hasStoredToken = getStoredToken() != nil
         let hasCookie = HTTPCookieStorage.shared.cookies?.contains(where: { $0.name == "luma_session" }) == true
         if !hasStoredToken && !hasCookie {
             let guestId = UUID().uuidString.prefix(8).lowercased()
@@ -166,7 +355,7 @@ public final class APIClient: APIClientProtocol {
             HTTPCookieStorage.shared.setCookies(cookies, for: requestUrl, mainDocumentURL: nil)
             for cookie in cookies {
                 if cookie.name == "luma_session" {
-                    UserDefaults.standard.set(cookie.value, forKey: "luma_session_token")
+                    saveSessionToken(cookie.value)
                 }
             }
         }
@@ -192,9 +381,10 @@ public final class APIClient: APIClientProtocol {
             }
         }
         if cookieDict["luma_session"] == nil,
-           let saved = UserDefaults.standard.string(forKey: "luma_session_token"),
+           let saved = getStoredToken(),
            !saved.isEmpty {
             cookieDict["luma_session"] = saved
+            request.setValue("Bearer \(saved)", forHTTPHeaderField: "Authorization")
         }
 
         if !cookieDict.isEmpty {
@@ -212,7 +402,8 @@ public final class APIClient: APIClientProtocol {
     }
 
     public func request<T: Decodable>(_ endpoint: APIEndpoint, body: (any Encodable)? = nil) async throws -> T {
-        let urlRequest = try createRequest(endpoint, body: body)
+        var urlRequest = try createRequest(endpoint, body: body)
+        await signRequestIfNeeded(&urlRequest, endpoint: endpoint, bodyData: urlRequest.httpBody)
         let (data, response) = try await perform(urlRequest)
 
         saveCookies(from: response, for: urlRequest.url)

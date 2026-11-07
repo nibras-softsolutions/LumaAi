@@ -118,7 +118,7 @@ public struct MessageBubbleView: View {
                 MarkdownView(message.content)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .background(Color.white)
+                    .background(Color.lumaSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)

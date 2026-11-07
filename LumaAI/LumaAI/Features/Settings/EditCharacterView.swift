@@ -80,7 +80,7 @@ public struct EditCharacterView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(.settingsPrimaryText)
                                 .padding(14)
-                                .background(Color.white)
+                                .background(Color.settingsCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -97,7 +97,7 @@ public struct EditCharacterView: View {
                                 .font(.system(size: 15))
                                 .foregroundColor(.settingsPrimaryText)
                                 .padding(14)
-                                .background(Color.white)
+                                .background(Color.settingsCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -113,9 +113,10 @@ public struct EditCharacterView: View {
                             TextEditor(text: $systemPrompt)
                                 .font(.system(size: 14))
                                 .foregroundColor(.settingsPrimaryText)
+                                .scrollContentBackground(.hidden)
                                 .frame(minHeight: 120)
                                 .padding(10)
-                                .background(Color.white)
+                                .background(Color.settingsCard)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -163,10 +164,10 @@ public struct EditCharacterView: View {
                         saveCharacter()
                     }
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isValid ? .white : Color.white.opacity(0.4))
+                    .foregroundColor(isValid ? Color.lumaInversePrimaryText : Color.lumaInversePrimaryText.opacity(0.4))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                    .background(isValid ? Color.settingsPrimaryText : Color.gray)
+                    .background(isValid ? Color.settingsPrimaryText : Color.gray.opacity(0.4))
                     .clipShape(Capsule())
                     .disabled(!isValid)
                 }
@@ -229,7 +230,7 @@ public struct EditCharacterView: View {
                         Text(emoji)
                             .font(.system(size: 24))
                             .frame(width: 44, height: 44)
-                            .background(avatarEmoji == emoji ? Color.white : Color.clear)
+                            .background(avatarEmoji == emoji ? Color.settingsCard : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -239,7 +240,7 @@ public struct EditCharacterView: View {
                 }
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.settingsCard)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -265,7 +266,7 @@ public struct EditCharacterView: View {
                             .frame(width: 34, height: 34)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.white, lineWidth: accentColorHex == item.hex ? 2.5 : 0)
+                                    .stroke(Color.settingsCard, lineWidth: accentColorHex == item.hex ? 2.5 : 0)
                             )
                             .overlay(
                                 Circle()
@@ -276,7 +277,7 @@ public struct EditCharacterView: View {
                 Spacer()
             }
             .padding(12)
-            .background(Color.white)
+            .background(Color.settingsCard)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
