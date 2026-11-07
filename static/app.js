@@ -309,17 +309,110 @@ async function syncConversationsWithServer() {
           })),
         }));
         window.localStorage.setItem(accountStorageKey(CHAT_STORAGE_KEY), JSON.stringify(conversations));
-        if (!conversations.some((c) => c.id === currentConversation.id)) {
-          currentConversation = conversations[0] || makeConversation();
+        const activeMatch = conversations.find((c) => c.id === currentConversation.id);
+        if (activeMatch) {
+          if (activeMatch.messages.length !== currentConversation.messages.length || activeMatch.updatedAt > currentConversation.updatedAt) {
+            currentConversation = activeMatch;
+            renderConversation(false);
+          }
+        } else if (currentConversation.messages.length === 0 && conversations.length > 0) {
+          currentConversation = conversations[0];
+          renderConversation(false);
         }
         renderHistory();
-        renderConversation();
       }
     }
   } catch (err) {
     console.warn("Could not sync conversations with backend:", err);
   }
 }
+
+let liveSyncTimer = null;
+let lastSyncTimestamp = null;
+let isPollingLiveSync = false;
+
+async function pollLiveConversation() {
+  if (!authenticatedUser || activeGeneration || document.visibilityState === "hidden" || isPollingLiveSync) {
+    return;
+  }
+  isPollingLiveSync = true;
+  try {
+    const curId = currentConversation ? currentConversation.id : "";
+    const params = new URLSearchParams();
+    if (lastSyncTimestamp) params.set("since", lastSyncTimestamp);
+    if (curId) params.set("current_id", curId);
+
+    const res = await apiFetch(`/api/chat/sync/poll?${params.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.has_updates) {
+        lastSyncTimestamp = data.latest_updated_at;
+        const listRes = await apiFetch("/api/chat/conversations");
+        if (listRes.ok) {
+          const serverConvs = await listRes.json();
+          if (Array.isArray(serverConvs)) {
+            const mapped = serverConvs.map((item) => ({
+              id: item.id,
+              title: item.title || "New conversation",
+              createdAt: item.createdAt ? new Date(item.createdAt).getTime() : Date.now(),
+              updatedAt: item.updatedAt ? new Date(item.updatedAt).getTime() : Date.now(),
+              messages: (item.messages || []).map((m) => ({
+                id: m.id || makeId(),
+                role: m.role,
+                content: m.content || "",
+                status: m.status || "complete",
+                image: m.imageAttachment || null,
+                createdAt: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
+              })),
+            }));
+            conversations = mapped;
+            window.localStorage.setItem(accountStorageKey(CHAT_STORAGE_KEY), JSON.stringify(conversations));
+
+            const curMatch = conversations.find((c) => c.id === currentConversation.id);
+            if (curMatch) {
+              if (curMatch.messages.length !== currentConversation.messages.length || curMatch.updatedAt > currentConversation.updatedAt) {
+                currentConversation = curMatch;
+                renderConversation(false);
+              }
+            } else if (currentConversation.messages.length === 0 && conversations.length > 0) {
+              currentConversation = conversations[0];
+              renderConversation(false);
+            }
+            renderHistory();
+          }
+        }
+      } else if (data.latest_updated_at) {
+        lastSyncTimestamp = data.latest_updated_at;
+      }
+    }
+  } catch (err) {
+    // Background polling fallback
+  } finally {
+    isPollingLiveSync = false;
+  }
+}
+
+function startLiveSync() {
+  stopLiveSync();
+  liveSyncTimer = window.setInterval(pollLiveConversation, 3500);
+}
+
+function stopLiveSync() {
+  if (liveSyncTimer) {
+    window.clearInterval(liveSyncTimer);
+    liveSyncTimer = null;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    pollLiveConversation();
+  }
+});
+
+window.addEventListener("focus", () => {
+  pollLiveConversation();
+});
 
 function persist() {
   if (!authenticatedUser) return false;
@@ -1535,6 +1628,7 @@ function showChat(user, pushHistory = false) {
   updateUserProfileUI();
   loadCustomCharacters();
   syncConversationsWithServer();
+  startLiveSync();
   const profileEl = document.querySelector("#profileName");
   if (profileEl) profileEl.textContent = getUserDisplayName();
   shell.hidden = false;
@@ -1719,6 +1813,7 @@ async function submitAuthForm({ form, submit, message, endpoint, successMessage 
 }
 
 async function logout() {
+  stopLiveSync();
   if (activeGeneration) stopGeneration();
   try {
     const response = await apiFetch("/api/auth/logout", {
@@ -3335,8 +3430,12 @@ function applyUserAvatar(element) {
   if (!element) return;
   if (authenticatedUser?.profile_image_url) {
     element.classList.add("has-photo");
-    const cacheBuster = authenticatedUser.updated_at ? `?v=${authenticatedUser.updated_at}` : "";
-    element.style.backgroundImage = `url("${authenticatedUser.profile_image_url}${cacheBuster}")`;
+    let imgUrl = authenticatedUser.profile_image_url;
+    if (!imgUrl.includes("?") && authenticatedUser.updated_at) {
+      const ts = typeof authenticatedUser.updated_at === "string" ? new Date(authenticatedUser.updated_at).getTime() : authenticatedUser.updated_at;
+      imgUrl += `?v=${ts}`;
+    }
+    element.style.backgroundImage = `url("${imgUrl}")`;
     element.style.backgroundColor = "";
     element.textContent = "";
   } else if (authenticatedUser?.avatar_emoji) {

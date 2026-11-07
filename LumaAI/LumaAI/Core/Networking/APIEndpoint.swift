@@ -33,6 +33,7 @@ public enum APIEndpoint {
     case userCharacters
     case userCharacter(id: String)
     case getConversations
+    case getLatestConversation
     case saveConversation
     case deleteConversation(id: String)
     case clearAllConversations
@@ -81,6 +82,8 @@ public enum APIEndpoint {
             path = "api/user/characters/\(id)"
         case .getConversations, .saveConversation, .clearAllConversations:
             path = "api/chat/conversations"
+        case .getLatestConversation:
+            path = "api/chat/conversations/latest"
         case .deleteConversation(let id):
             path = "api/chat/conversations/\(id)"
         case .syncConversations:
@@ -102,7 +105,7 @@ public enum APIEndpoint {
 
     public var httpMethod: String {
         switch self {
-        case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters, .getConversations:
+        case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters, .getConversations, .getLatestConversation:
             return "GET"
         case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice, .uploadProfilePhoto, .saveConversation, .syncConversations, .signingKey:
             return "POST"

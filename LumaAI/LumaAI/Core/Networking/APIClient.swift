@@ -128,6 +128,7 @@ public protocol APIClientProtocol: AnyObject {
     func createRemoteCustomCharacter(_ payload: CustomCharacterPayload) async throws -> CustomCharacterRemote
     func deleteRemoteCustomCharacter(id: String) async throws
     func fetchConversations() async throws -> [Conversation]
+    func fetchLatestConversation() async throws -> Conversation?
     func saveConversation(_ conversation: Conversation) async throws
     func syncConversations(_ conversations: [Conversation]) async throws -> [Conversation]
     func deleteConversation(id: UUID) async throws
@@ -193,6 +194,16 @@ public extension APIClientProtocol {
     func fetchConversations() async throws -> [Conversation] {
         try await ensureSession()
         return try await request(.getConversations, body: nil)
+    }
+
+    func fetchLatestConversation() async throws -> Conversation? {
+        try await ensureSession()
+        do {
+            let conv: Conversation = try await request(.getLatestConversation, body: nil)
+            return conv
+        } catch {
+            return nil
+        }
     }
 
     func saveConversation(_ conversation: Conversation) async throws {
@@ -559,16 +570,10 @@ public final class APIClient: APIClientProtocol {
             }
             fullURL = parsed
         } else {
-            let path = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-            if #available(iOS 16.0, macOS 13.0, *) {
-                fullURL = configuration.baseURL.appending(path: path)
-            } else {
-                var url = configuration.baseURL
-                for comp in path.split(separator: "/") {
-                    url = url.appendingPathComponent(String(comp))
-                }
-                fullURL = url
+            guard let resolved = URL(string: urlString, relativeTo: configuration.baseURL)?.absoluteURL else {
+                throw NetworkError.invalidURL
             }
+            fullURL = resolved
         }
 
         var req = URLRequest(url: fullURL)

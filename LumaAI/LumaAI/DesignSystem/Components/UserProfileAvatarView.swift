@@ -123,16 +123,7 @@ public struct UserProfileAvatarView: View {
         if urlString.hasPrefix("http://") || urlString.hasPrefix("https://") {
             return URL(string: urlString)
         }
-        let path = urlString.hasPrefix("/") ? String(urlString.dropFirst()) : urlString
-        if #available(iOS 16.0, macOS 13.0, *) {
-            return APIConfiguration.defaultBaseURL.appending(path: path)
-        } else {
-            var url = APIConfiguration.defaultBaseURL
-            for comp in path.split(separator: "/") {
-                url = url.appendingPathComponent(String(comp))
-            }
-            return url
-        }
+        return URL(string: urlString, relativeTo: APIConfiguration.defaultBaseURL)?.absoluteURL
     }
 }
 

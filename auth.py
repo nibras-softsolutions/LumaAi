@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 from pwdlib.hashers.argon2 import Argon2Hasher
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, delete, select
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -391,6 +391,7 @@ class UserResponse(BaseModel):
     bio: str | None = None
     avatar_emoji: str | None = None
     avatar_color_hex: str | None = None
+    updated_at: datetime | None = None
 
 
 class UpdateProfileRequest(BaseModel):
@@ -966,9 +967,28 @@ async def login(
     return user
 
 
+def _sync_user_profile_url(user: User) -> UserResponse:
+    url = user.profile_image_url
+    if user.profile_image_data and url:
+        base_url = url.split("?")[0]
+        ts = int(user.updated_at.timestamp()) if user.updated_at else 1
+        url = f"{base_url}?v={ts}"
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        profile_image_url=url,
+        custom_name=user.custom_name,
+        bio=user.bio,
+        avatar_emoji=user.avatar_emoji,
+        avatar_color_hex=user.avatar_color_hex,
+        updated_at=user.updated_at,
+    )
+
+
 @router.get("/me", response_model=UserResponse)
 async def current_user(user: User = Depends(require_user)) -> User:
-    return user
+    return _sync_user_profile_url(user)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -1042,7 +1062,7 @@ AVATARS_DIR.mkdir(parents=True, exist_ok=True)
 @router.get("/profile", response_model=UserResponse)
 @user_router.get("/profile", response_model=UserResponse)
 async def get_user_profile(user: User = Depends(require_user)) -> User:
-    return user
+    return _sync_user_profile_url(user)
 
 
 @router.put("/profile", response_model=UserResponse)
@@ -1054,6 +1074,8 @@ async def update_user_profile(
     user: User = Depends(require_user),
 ) -> User:
     key_info = await verify_request_signature(request, user, required=False)
+    now = _utcnow()
+    ts = int(now.timestamp())
     async with SessionFactory.begin() as db:
         db_user = await db.get(User, user.id)
         if db_user is None:
@@ -1073,17 +1095,17 @@ async def update_user_profile(
                 db_user.profile_image_url = f"/api/user/profile/avatar/{user.id}"
             else:
                 db_user.profile_image_url = clean_url if clean_url else None
-        db_user.updated_at = _utcnow()
+        db_user.updated_at = now
         await db.flush()
         if key_info:
             sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
-        return db_user
+        return _sync_user_profile_url(db_user)
 
 
 @router.get("/avatar/{user_id}", include_in_schema=False)
 @user_router.get("/profile/avatar/{user_id}", include_in_schema=False)
 @user_router.get("/avatar/{user_id}", include_in_schema=False)
-async def get_user_avatar(user_id: str) -> Response:
+async def get_user_avatar(user_id: str, request: Request, v: str | None = None) -> Response:
     async with SessionFactory.begin() as db:
         user = await db.get(User, user_id)
         if not user or not user.profile_image_data:
@@ -1091,7 +1113,17 @@ async def get_user_avatar(user_id: str) -> Response:
             for f in AVATARS_DIR.glob(f"avatar_{user_id}_*"):
                 try:
                     data = f.read_bytes()
-                    return Response(content=data, media_type="image/jpeg")
+                    etag = hashlib.sha256(data).hexdigest()
+                    if request.headers.get("if-none-match") == f'"{etag}"':
+                        return Response(status_code=304, headers={"ETag": f'"{etag}"', "Cache-Control": "private, no-cache, must-revalidate"})
+                    return Response(
+                        content=data,
+                        media_type="image/jpeg",
+                        headers={
+                            "Cache-Control": "private, no-cache, must-revalidate",
+                            "ETag": f'"{etag}"',
+                        },
+                    )
                 except Exception:
                     pass
             raise HTTPException(status_code=404, detail="Avatar not found.")
@@ -1104,12 +1136,16 @@ async def get_user_avatar(user_id: str) -> Response:
         except Exception:
             raise HTTPException(status_code=500, detail="Corrupted avatar data.")
 
+        etag = hashlib.sha256(image_bytes).hexdigest()
+        if request.headers.get("if-none-match") == f'"{etag}"':
+            return Response(status_code=304, headers={"ETag": f'"{etag}"', "Cache-Control": "private, no-cache, must-revalidate"})
+
         return Response(
             content=image_bytes,
             media_type="image/jpeg",
             headers={
-                "Cache-Control": "public, max-age=86400",
-                "ETag": f'"{hashlib.md5(image_bytes).hexdigest()}"',
+                "Cache-Control": "private, no-cache, must-revalidate",
+                "ETag": f'"{etag}"',
             },
         )
 
@@ -1163,12 +1199,14 @@ async def upload_profile_photo(
     jpeg_bytes = buffer.getvalue()
     b64_stored = base64.b64encode(jpeg_bytes).decode("ascii")
 
+    now = _utcnow()
+    ts = int(now.timestamp())
     profile_url = f"/api/user/profile/avatar/{user.id}"
 
     # Also keep a local cache file if folder is writable
     try:
         AVATARS_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"avatar_{user.id}_{int(datetime.now(timezone.utc).timestamp())}_{secrets.token_hex(4)}.jpg"
+        filename = f"avatar_{user.id}_{ts}_{secrets.token_hex(4)}.jpg"
         for old_file in AVATARS_DIR.glob(f"avatar_{user.id}_*"):
             old_file.unlink(missing_ok=True)
         dest_path = AVATARS_DIR / filename
@@ -1182,11 +1220,11 @@ async def upload_profile_photo(
             raise HTTPException(status_code=404, detail="User not found.")
         db_user.profile_image_data = b64_stored
         db_user.profile_image_url = profile_url
-        db_user.updated_at = _utcnow()
+        db_user.updated_at = now
         await db.flush()
         if key_info and response is not None and request is not None:
             sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
-        return db_user
+        return _sync_user_profile_url(db_user)
 
 
 @router.delete("/profile/photo", response_model=UserResponse)
@@ -1216,7 +1254,7 @@ async def delete_profile_photo(
         await db.flush()
         if key_info and response is not None and request is not None:
             sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
-        return db_user
+        return _sync_user_profile_url(db_user)
 
 
 @router.delete("/profile", response_model=UserResponse)
@@ -1250,15 +1288,7 @@ async def reset_profile(
         await db.flush()
         if key_info and response is not None and request is not None:
             sign_response(response, key_info[1], request.headers.get("x-nonce", ""))
-        return db_user
-        db_user.bio = None
-        db_user.avatar_emoji = None
-        db_user.avatar_color_hex = None
-        db_user.profile_image_url = None
-        db_user.profile_image_data = None
-        db_user.updated_at = _utcnow()
-        await db.flush()
-        return db_user
+        return _sync_user_profile_url(db_user)
 
 
 @router.get("/characters", response_model=list[CustomCharacterSchema])
@@ -1341,6 +1371,14 @@ async def delete_custom_character(
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
+def _format_dt(dt: datetime | None) -> str:
+    if not dt:
+        return _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 @chat_router.get("/conversations")
 async def list_conversations(user: User = Depends(require_user)) -> list[dict]:
     """Retrieve all conversations and their full message history for the authenticated user from the database."""
@@ -1373,16 +1411,111 @@ async def list_conversations(user: User = Depends(require_user)) -> list[dict]:
                     "content": m.content,
                     "status": m.status,
                     "imageAttachment": img,
-                    "createdAt": m.created_at.isoformat(),
+                    "createdAt": _format_dt(m.created_at),
                 })
             result.append({
                 "id": conv.id,
                 "title": conv.title,
                 "messages": messages_list,
-                "createdAt": conv.created_at.isoformat(),
-                "updatedAt": conv.updated_at.isoformat(),
+                "createdAt": _format_dt(conv.created_at),
+                "updatedAt": _format_dt(conv.updated_at),
             })
         return result
+
+
+@chat_router.get("/conversations/latest")
+async def get_latest_conversation(user: User = Depends(require_user)) -> dict | None:
+    """Retrieve the single most recently updated conversation for the user, with full messages."""
+    async with SessionFactory.begin() as db:
+        stmt = (
+            select(ConversationModel)
+            .where(ConversationModel.user_id == user.id)
+            .order_by(ConversationModel.updated_at.desc())
+            .limit(1)
+        )
+        conv = (await db.scalars(stmt)).first()
+        if not conv:
+            return None
+        msg_stmt = (
+            select(ChatMessageModel)
+            .where(ChatMessageModel.conversation_id == conv.id)
+            .order_by(ChatMessageModel.created_at.asc())
+        )
+        msgs = (await db.scalars(msg_stmt)).all()
+        messages_list = []
+        for m in msgs:
+            img = None
+            if m.image_attachment:
+                try:
+                    img = json.loads(m.image_attachment)
+                except Exception:
+                    pass
+            messages_list.append({
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "status": m.status,
+                "imageAttachment": img,
+                "createdAt": _format_dt(m.created_at),
+            })
+        return {
+            "id": conv.id,
+            "title": conv.title,
+            "messages": messages_list,
+            "createdAt": _format_dt(conv.created_at),
+            "updatedAt": _format_dt(conv.updated_at),
+        }
+
+
+@chat_router.get("/sync/poll")
+async def poll_sync_status(
+    since: str | None = None,
+    current_id: str | None = None,
+    user: User = Depends(require_user),
+) -> dict:
+    """Lightweight polling endpoint to detect cross-device updates."""
+    async with SessionFactory.begin() as db:
+        stmt = (
+            select(ConversationModel)
+            .where(ConversationModel.user_id == user.id)
+            .order_by(ConversationModel.updated_at.desc())
+            .limit(1)
+        )
+        latest_conv = (await db.scalars(stmt)).first()
+        if not latest_conv:
+            return {
+                "has_updates": False,
+                "latest_conversation_id": None,
+                "latest_updated_at": None,
+                "message_count": 0,
+            }
+
+        latest_updated_str = _format_dt(latest_conv.updated_at)
+        target_conv_id = current_id if current_id else latest_conv.id
+
+        # Count messages for target conversation
+        msg_count_stmt = select(func.count(ChatMessageModel.id)).where(
+            ChatMessageModel.conversation_id == target_conv_id
+        )
+        msg_count = (await db.scalar(msg_count_stmt)) or 0
+
+        has_updates = False
+        if not since:
+            has_updates = True
+        else:
+            try:
+                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=None)
+                if latest_conv.updated_at > since_dt:
+                    has_updates = True
+            except Exception:
+                has_updates = True
+
+        return {
+            "has_updates": has_updates,
+            "latest_conversation_id": latest_conv.id,
+            "latest_updated_at": latest_updated_str,
+            "message_count": msg_count,
+        }
 
 
 @chat_router.post("/conversations")
@@ -1481,14 +1614,14 @@ async def get_conversation(conversation_id: str, user: User = Depends(require_us
                 "content": m.content,
                 "status": m.status,
                 "imageAttachment": img,
-                "createdAt": m.created_at.isoformat(),
+                "createdAt": _format_dt(m.created_at),
             })
         return {
             "id": conv.id,
             "title": conv.title,
             "messages": messages_list,
-            "createdAt": conv.created_at.isoformat(),
-            "updatedAt": conv.updated_at.isoformat(),
+            "createdAt": _format_dt(conv.created_at),
+            "updatedAt": _format_dt(conv.updated_at),
         }
 
 

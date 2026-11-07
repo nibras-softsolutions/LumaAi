@@ -37,6 +37,11 @@ public final class AppEnvironment: ObservableObject {
             conversationStore: conversationStore,
             userId: currentUserId
         )
+        if currentUserId != "anonymous" {
+            Task { @MainActor [weak self] in
+                await self?.chatViewModel.syncWithServer(force: true)
+            }
+        }
 
         // Observe auth state changes to re-key chatViewModel with new user's conversations
         resolvedAuth.$currentUser
@@ -49,6 +54,11 @@ public final class AppEnvironment: ObservableObject {
                     conversationStore: self.conversationStore,
                     userId: newId
                 )
+                if newUser != nil {
+                    Task { @MainActor [weak self] in
+                        await self?.chatViewModel.syncWithServer(force: true)
+                    }
+                }
 
                 // Sync shared WidgetKit storage
                 let isAuth = newUser != nil

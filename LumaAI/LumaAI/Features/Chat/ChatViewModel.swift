@@ -1,6 +1,9 @@
 import Foundation
 import SwiftUI
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 public final class ChatViewModel: ObservableObject {
@@ -20,6 +23,7 @@ public final class ChatViewModel: ObservableObject {
     private var streamingTask: Task<Void, Never>?
     private let speechService = SpeechRecognitionService()
     private var cancellables = Set<AnyCancellable>()
+    private var syncTimer: Timer?
 
     public init(
         conversation: Conversation = Conversation(),
@@ -47,6 +51,18 @@ public final class ChatViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        #if canImport(UIKit)
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.syncWithServer(force: true)
+                }
+            }
+            .store(in: &cancellables)
+        #endif
+
+        startLiveSync()
     }
 
     public func setConversation(_ newConv: Conversation) {
@@ -327,6 +343,56 @@ public final class ChatViewModel: ObservableObject {
         let toSave = conversation
         Task {
             try? await apiClient.saveConversation(toSave)
+        }
+    }
+
+    public func startLiveSync() {
+        stopLiveSync()
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.syncWithServer(force: false)
+            }
+        }
+    }
+
+    public func stopLiveSync() {
+        syncTimer?.invalidate()
+        syncTimer = nil
+    }
+
+    public func syncWithServer(force: Bool = false) async {
+        guard !isStreaming else { return }
+        guard let latest = try? await apiClient.fetchLatestConversation() else { return }
+
+        // If local conversation is completely empty and remote has messages, adopt it
+        if conversation.messages.isEmpty && !latest.messages.isEmpty {
+            self.conversation = latest
+            updateWidgetPrompt(from: latest)
+            return
+        }
+
+        // If active conversation matches remote ID
+        if conversation.id == latest.id {
+            if latest.messages.count > conversation.messages.count || latest.updatedAt > conversation.updatedAt {
+                self.conversation = latest
+                var all = conversationStore.loadConversations(for: userId)
+                if let idx = all.firstIndex(where: { $0.id == latest.id }) {
+                    all[idx] = latest
+                } else {
+                    all.insert(latest, at: 0)
+                }
+                conversationStore.saveConversations(all, for: userId)
+                updateWidgetPrompt(from: latest)
+            }
+        } else if force && conversation.messages.isEmpty {
+            self.conversation = latest
+            updateWidgetPrompt(from: latest)
+        }
+    }
+
+    private func updateWidgetPrompt(from conv: Conversation) {
+        if let lastUserMsg = conv.messages.last(where: { $0.role == .user }), !lastUserMsg.content.isEmpty {
+            LumaWidgetStore.shared.updateRecentPrompt(lastUserMsg.content)
         }
     }
 }
