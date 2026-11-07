@@ -111,6 +111,15 @@ public struct ImageViewerView: View {
         isDownloading = true
         errorMessage = nil
 
+        if attachment.imageUrl.hasPrefix("data:image/") {
+            let parts = attachment.imageUrl.components(separatedBy: ",")
+            if parts.count > 1, let b64 = parts.last, let data = Data(base64Encoded: b64), let uiImage = UIImage(data: data) {
+                self.loadedImage = uiImage
+                self.isDownloading = false
+                return
+            }
+        }
+
         let urlString = attachment.imageUrl.hasPrefix("http") ? attachment.imageUrl : "https://lumaai-j0u3.onrender.com" + attachment.imageUrl
         guard let url = URL(string: urlString) else {
             errorMessage = "Invalid image URL"

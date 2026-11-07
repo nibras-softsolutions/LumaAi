@@ -24,9 +24,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/styles.css?v=dark-v4">
+    <link rel="stylesheet" href="/static/styles.css?v=vision-v1">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="/static/app.js?v=dark-v4" defer></script>
+    <script src="/static/app.js?v=vision-v1" defer></script>
   </head>
   <body>
     <main class="experience-view onboarding-view" id="onboardingView" hidden aria-labelledby="onboardingHeadline">
@@ -267,11 +267,22 @@
               </select>
             </div>
           </div>
+          <div class="attached-photo-bar" id="attachedPhotoBar" hidden>
+            <div class="attached-photo-thumb-wrap">
+              <img id="attachedPhotoThumb" alt="Attached photo preview" src="">
+              <button class="attached-photo-remove" id="removeAttachedPhoto" type="button" aria-label="Remove photo">&times;</button>
+            </div>
+            <span class="attached-photo-label">Photo ready for AI vision analysis</span>
+          </div>
           <form class="composer" id="composerForm">
             <label class="sr-only" for="messageInput">Message Luma AI</label>
             <button class="composer-tool-btn" id="imageModeToggle" type="button" aria-label="Generate Image" title="Generate an image (Toggle Image Mode)">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <button class="composer-tool-btn" id="attachPhotoButton" type="button" aria-label="Attach Photo" title="Attach photo to ask & analyze with AI">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" stroke="currentColor" stroke-width="1.6"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="m21 15-5-5L5 21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <input type="file" id="photoFileInput" accept="image/*" hidden>
             <button class="composer-tool-btn" id="ocrScanButton" type="button" aria-label="Scan Document / Image OCR" title="Scan document or extract text from image">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="1.6"/></svg>
             </button>

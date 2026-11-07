@@ -156,20 +156,38 @@ class OpenAICompatibleModel:
         self.concurrency_limiter = asyncio.Semaphore(max_concurrency)
 
     async def astream(self, messages: list[BaseMessage]) -> AsyncIterator[AIMessageChunk]:
+        has_image = False
         payload_messages = []
         for msg in messages:
             if isinstance(msg, SystemMessage):
                 payload_messages.append({"role": "system", "content": msg.content})
             elif isinstance(msg, HumanMessage):
+                if isinstance(msg.content, list):
+                    has_image = True
                 payload_messages.append({"role": "user", "content": msg.content})
             else:
                 payload_messages.append({"role": "assistant", "content": msg.content})
 
+        target_model = self.model
+        target_base_url = self.base_url
+        target_api_key = self.api_key
+
+        if has_image:
+            # Route to vision-capable model
+            if "groq.com" in target_base_url:
+                target_model = "llama-3.2-11b-vision-preview"
+            elif os.getenv("OPENAI_API_KEY") and ("openai" in target_base_url or "groq" in target_base_url):
+                target_base_url = "https://api.openai.com/v1"
+                target_api_key = os.getenv("OPENAI_API_KEY")
+                target_model = "gpt-4o-mini"
+            elif "openrouter.ai" in target_base_url:
+                target_model = "openai/gpt-4o-mini"
+
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {target_api_key}",
             "Content-Type": "application/json",
         }
-        if "openrouter.ai" in self.base_url:
+        if "openrouter.ai" in target_base_url:
             headers["HTTP-Referer"] = "https://luma-ai.vercel.app"
             headers["X-Title"] = "Luma AI"
 
@@ -191,10 +209,10 @@ class OpenAICompatibleModel:
                     async with httpx.AsyncClient(timeout=60.0) as client:
                         async with client.stream(
                             "POST",
-                            f"{self.base_url}/chat/completions",
+                            f"{target_base_url}/chat/completions",
                             headers=headers,
                             json={
-                                "model": self.model,
+                                "model": target_model,
                                 "messages": payload_messages,
                                 "stream": True,
                             },
@@ -424,20 +442,23 @@ ALLOWED_MARKDOWN_TAGS = {
 
 
 class ChatMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     role: Literal["user", "assistant", "system"]
-    content: str = Field(min_length=1, max_length=MAX_MESSAGE_LENGTH)
+    content: str = Field(default="", max_length=MAX_MESSAGE_LENGTH)
+    image: str | None = None
 
     @model_validator(mode="after")
     def content_is_not_blank(self) -> ChatMessage:
-        if not self.content.strip():
+        if not self.content.strip() and not self.image:
             raise ValueError("Message content cannot be blank.")
+        if not self.content.strip() and self.image:
+            self.content = "Please analyze and describe this photo."
         return self
 
 
 class ChatRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     messages: list[ChatMessage] = Field(
         min_length=1,
@@ -463,7 +484,17 @@ def _to_langchain_messages(messages: list[ChatMessage]) -> list[BaseMessage]:
     result: list[BaseMessage] = []
     for message in messages:
         if message.role == "user":
-            result.append(HumanMessage(content=message.content))
+            if message.image:
+                img_val = message.image.strip()
+                if not img_val.startswith("data:") and not img_val.startswith("http://") and not img_val.startswith("https://"):
+                    img_val = f"data:image/jpeg;base64,{img_val}"
+                content = [
+                    {"type": "text", "text": message.content or "Please analyze and describe this photo."},
+                    {"type": "image_url", "image_url": {"url": img_val}},
+                ]
+                result.append(HumanMessage(content=content))
+            else:
+                result.append(HumanMessage(content=message.content))
         elif message.role == "system":
             result.append(SystemMessage(content=message.content))
         else:

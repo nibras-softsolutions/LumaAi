@@ -683,7 +683,31 @@ function createMessage(message, conversationId) {
   body.className = "message-body";
   body.dataset.messageBody = "";
   body.textContent = message.content;
-  main.append(heading, body);
+
+  if (message.image && typeof message.image === "string") {
+    const imgCard = document.createElement("div");
+    imgCard.className = "message-image-card";
+    const img = document.createElement("img");
+    img.src = message.image;
+    img.alt = "Attached photo";
+    img.loading = "lazy";
+    const imgActions = document.createElement("div");
+    imgActions.className = "message-image-actions";
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "share-image-btn";
+    shareBtn.type = "button";
+    shareBtn.title = "Share or download image";
+    shareBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" width="16" height="16" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    shareBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      shareOrDownloadImage(message.image);
+    });
+    imgActions.append(shareBtn);
+    imgCard.append(img, imgActions);
+    main.append(heading, imgCard, body);
+  } else {
+    main.append(heading, body);
+  }
 
   const entry = { card, body, conversationId };
   messageNodes.set(message.id, entry);
@@ -965,12 +989,14 @@ function codeMimeType(language) {
   return codeFileTypes[normalizeCodeLanguage(language)]?.mime ?? "text/plain";
 }
 
+let attachedImageData = null;
+
 function updateGenerationControls() {
   const generating = activeGeneration !== null;
   stopButton.hidden = !generating;
   topbarStopButton.hidden = !generating;
   sendButton.hidden = generating;
-  sendButton.disabled = generating || !messageInput.value.trim();
+  sendButton.disabled = generating || (!messageInput.value.trim() && !attachedImageData);
   if (imageModeToggle) imageModeToggle.disabled = generating;
   messageInput.setAttribute("aria-busy", String(generating));
 }
@@ -987,6 +1013,7 @@ function titleFromFirstMessage(text) {
 }
 
 function detectImageIntent(text) {
+  if (attachedImageData) return { isImage: false, prompt: text, aspect: "1:1" };
   const t = text.trim();
   if (t.length < 2) return { isImage: false, prompt: t, aspect: "1:1" };
   if (/\b(?:function|class|method|component|script|algorithm|api|endpoint|sql|database|python|html|css|javascript|typescript|c\+\+|java|rust|go)\b/i.test(t)) {
@@ -1018,6 +1045,35 @@ function updateImageModeUi() {
   } else {
     messageInput.placeholder = "Type your message...";
   }
+}
+
+async function shareOrDownloadImage(url) {
+  try {
+    if (navigator.share) {
+      if (url.startsWith("data:")) {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const file = new File([blob], "luma-photo.jpg", { type: blob.type || "image/jpeg" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "Luma AI Photo" });
+          return;
+        }
+      } else {
+        await navigator.share({ title: "Luma AI Image", url: url });
+        return;
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return;
+  }
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `luma-image-${Date.now()}.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast("Image downloaded to your device.");
 }
 
 function createImageCard(image, messageId) {
@@ -1079,6 +1135,14 @@ function createImageCard(image, messageId) {
     }
   });
 
+  const shareBtn = document.createElement("button");
+  shareBtn.className = "image-btn image-share-btn";
+  shareBtn.type = "button";
+  shareBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Share`;
+  shareBtn.addEventListener("click", () => {
+    shareOrDownloadImage(apiUrl(image.image_url));
+  });
+
   const copyBtn = document.createElement("button");
   copyBtn.className = "image-btn image-copy-btn";
   copyBtn.type = "button";
@@ -1100,7 +1164,7 @@ function createImageCard(image, messageId) {
     sendMessage(image.prompt, null, { forceImage: true, aspect: image.aspect_ratio });
   });
 
-  actions.append(downloadBtn, copyBtn, retryBtn);
+  actions.append(downloadBtn, shareBtn, copyBtn, retryBtn);
   card.append(wrapper, meta, actions);
   return card;
 }
@@ -1124,7 +1188,8 @@ function createImageSkeleton() {
 }
 
 async function sendMessage(text = messageInput.value.trim(), retryMessageId = null, options = {}) {
-  if ((!text && !retryMessageId) || activeGeneration) return;
+  const photoToSend = attachedImageData;
+  if ((!text && !photoToSend && !retryMessageId) || activeGeneration) return;
   const chat = currentChat();
   let userMessage;
   if (retryMessageId) {
@@ -1140,20 +1205,22 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
     userMessage = {
       id: makeId(),
       role: "user",
-      content: text,
+      content: text || (photoToSend ? "Please analyze and describe this photo." : ""),
+      image: photoToSend || null,
       status: "complete",
       createdAt: Date.now(),
     };
+    clearAttachedPhoto();
     chat.messages.push(userMessage);
     if (chat.messages.filter((message) => message.role === "user").length === 1) {
-      chat.title = titleFromFirstMessage(text) || "New conversation";
+      chat.title = titleFromFirstMessage(userMessage.content) || "New conversation";
     }
   }
   chat.updatedAt = Date.now();
   if (!conversations.some((conversation) => conversation.id === chat.id)) conversations.unshift(chat);
 
   const intent = detectImageIntent(text);
-  const shouldGenerateImage = Boolean(options.forceImage || isImageMode || intent.isImage);
+  const shouldGenerateImage = Boolean(!userMessage.image && (options.forceImage || isImageMode || intent.isImage));
   const imageAspect = options.aspect || (isImageMode ? (aspectRatioSelect?.value || "1:1") : intent.aspect);
   const imagePrompt = (intent.isImage ? intent.prompt : text) || text;
 
@@ -1227,7 +1294,7 @@ async function sendMessage(text = messageInput.value.trim(), retryMessageId = nu
   try {
     const candidates = chat.messages
       .filter((message) => message.id !== assistant.id && message.status === "complete")
-      .map(({ role, content }) => ({ role, content }));
+      .map(({ role, content, image }) => ({ role, content, image: image || undefined }));
     const messages = [];
     let historyLength = 0;
     for (
@@ -3934,6 +4001,82 @@ if (ocrScanButton && ocrFileInput) {
   });
 }
 
+// Photo Attachment & Multimodal Vision
+function clearAttachedPhoto() {
+  attachedImageData = null;
+  const bar = document.querySelector("#attachedPhotoBar");
+  const thumb = document.querySelector("#attachedPhotoThumb");
+  const fileInput = document.querySelector("#photoFileInput");
+  if (bar) bar.hidden = true;
+  if (thumb) thumb.src = "";
+  if (fileInput) fileInput.value = "";
+  updateGenerationControls();
+}
+
+function setupPhotoAttachment() {
+  const attachBtn = document.querySelector("#attachPhotoButton");
+  const photoInput = document.querySelector("#photoFileInput");
+  const bar = document.querySelector("#attachedPhotoBar");
+  const thumb = document.querySelector("#attachedPhotoThumb");
+  const removeBtn = document.querySelector("#removeAttachedPhoto");
+
+  if (attachBtn && photoInput) {
+    attachBtn.addEventListener("click", () => {
+      photoInput.click();
+    });
+
+    photoInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showToast("Please select an image (JPEG, PNG, HEIC, WEBP).");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        attachedImageData = reader.result;
+        if (thumb) thumb.src = attachedImageData;
+        if (bar) bar.hidden = false;
+        updateGenerationControls();
+        messageInput.focus();
+        showToast("Photo attached. Ask any question or click send to analyze!");
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (removeBtn) {
+    removeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearAttachedPhoto();
+    });
+  }
+
+  // Support pasting images directly from clipboard into the composer
+  if (messageInput) {
+    messageInput.addEventListener("paste", (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          const reader = new FileReader();
+          reader.onload = () => {
+            attachedImageData = reader.result;
+            if (thumb) thumb.src = attachedImageData;
+            if (bar) bar.hidden = false;
+            updateGenerationControls();
+            showToast("Photo pasted. Ask any question or click send to analyze!");
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    });
+  }
+}
+
 // Theme Management (System, Light, Dark)
 const THEME_STORAGE_KEY = "luma_theme";
 
@@ -4008,5 +4151,6 @@ function initTheme() {
 }
 
 initTheme();
+setupPhotoAttachment();
 window.addEventListener("popstate", handleExperiencePopState);
 initializeExperience();

@@ -111,6 +111,21 @@ public final class AppEnvironment: ObservableObject {
                 self?.handleDeepLink(destination: dest)
             }
             .store(in: &cancellables)
+
+        // Handle incoming photos shared from Apple Photos or other apps
+        LumaDeepLinkManager.shared.$sharedImage
+            .receive(on: DispatchQueue.main)
+            .compactMap { $0 }
+            .sink { [weak self] photo in
+                guard let self = self else { return }
+                self.chatViewModel.attachedImage = photo
+                self.showingSettings = false
+                self.showingVoiceMode = false
+                self.showingTextScanner = false
+                self.requestComposerFocus = true
+                LumaDeepLinkManager.shared.sharedImage = nil
+            }
+            .store(in: &cancellables)
     }
 
     public func handleDeepLink(url: URL) {

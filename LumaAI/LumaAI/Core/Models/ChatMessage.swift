@@ -86,10 +86,12 @@ public struct ChatMessage: Codable, Identifiable, Equatable {
 public struct SendMessagePayload: Codable {
     public let role: String
     public let content: String
+    public let image: String?
 
-    public init(role: String, content: String) {
+    public init(role: String, content: String, image: String? = nil) {
         self.role = role
         self.content = content
+        self.image = image
     }
 }
 

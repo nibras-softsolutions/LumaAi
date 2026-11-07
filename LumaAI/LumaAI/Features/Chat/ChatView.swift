@@ -115,6 +115,21 @@ public struct ChatView: View {
                     .background(Color.lumaError.opacity(0.1))
                 }
 
+                // Quick Vision Actions when photo is attached
+                if viewModel.attachedImage != nil && !viewModel.isStreaming {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            photoActionChip(title: "🔍 Explain photo", prompt: "Please explain and analyze what is shown in this photo in detail.")
+                            photoActionChip(title: "📝 Extract text", prompt: "Extract and transcribe all readable text, labels, and content in this image.")
+                            photoActionChip(title: "💡 What is this?", prompt: "Identify what is in this picture and give key facts about it.")
+                            photoActionChip(title: "🛠️ How to solve / fix", prompt: "Analyze the problem or situation shown in this photo and explain how to address it step-by-step.")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 4)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 // Orbix Studio Composer Bar
                 ComposerView(
                     text: $viewModel.inputText,
@@ -308,6 +323,28 @@ public struct ChatView: View {
                 Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func photoActionChip(title: String, prompt: String) -> some View {
+        Button(action: {
+            HapticFeedback.light()
+            dismissKeyboard()
+            viewModel.inputText = prompt
+            viewModel.sendMessage()
+        }) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Color.orbixPrimaryText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color.lumaSurfaceElevated)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(Color.orbixCardBorder, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
     }

@@ -443,9 +443,15 @@ public final class APIClient: APIClientProtocol {
                 do {
                     let endpoint = APIEndpoint.chatStream
                     let payloads = messages
-                        .filter { ($0.role == .user || $0.role == .assistant) && $0.status == .complete && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                        .filter { ($0.role == .user || $0.role == .assistant) && $0.status == .complete && (!$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || $0.imageAttachment != nil) }
                         .suffix(20)
-                        .map { SendMessagePayload(role: $0.role.rawValue, content: $0.content) }
+                        .map { msg -> SendMessagePayload in
+                            var imgData: String? = nil
+                            if let att = msg.imageAttachment, !att.imageUrl.isEmpty {
+                                imgData = att.imageUrl
+                            }
+                            return SendMessagePayload(role: msg.role.rawValue, content: msg.content, image: imgData)
+                        }
 
                     guard !payloads.isEmpty, payloads.last?.role == "user" else {
                         continuation.finish()
