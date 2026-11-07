@@ -39,6 +39,7 @@ public enum APIEndpoint {
     case clearAllConversations
     case syncConversations
     case signingKey
+    case encryptionKey
 
     public static var aiHealth: APIEndpoint { .healthAI }
     public static var imageGenerate: APIEndpoint { .generateImage }
@@ -90,6 +91,8 @@ public enum APIEndpoint {
             path = "api/chat/sync"
         case .signingKey:
             path = "api/auth/signing-key"
+        case .encryptionKey:
+            path = "api/auth/encryption-key"
         }
 
         if #available(iOS 16.0, macOS 13.0, *) {
@@ -105,7 +108,7 @@ public enum APIEndpoint {
 
     public var httpMethod: String {
         switch self {
-        case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters, .getConversations, .getLatestConversation:
+        case .health, .healthAI, .me, .viewImage, .userProfile, .userCharacters, .getConversations, .getLatestConversation, .encryptionKey:
             return "GET"
         case .register, .login, .googleAuth, .logout, .forgotPassword, .chatStream, .generateImage, .transcribeVoice, .uploadProfilePhoto, .saveConversation, .syncConversations, .signingKey:
             return "POST"
@@ -115,6 +118,40 @@ public enum APIEndpoint {
             return "DELETE"
         }
     }
+}
+
+public struct ServerEncryptionKeyResponse: Codable {
+    public let algorithm: String
+    public let format: String
+    public let publicKey: String
+    public let keyId: String
+
+    enum CodingKeys: String, CodingKey {
+        case algorithm
+        case format
+        case publicKey = "public_key"
+        case keyId = "key_id"
+    }
+}
+
+public struct EncryptedRequestEnvelope: Codable {
+    public let encrypted: Bool
+    public let enc_key: String
+    public let iv: String
+    public let ciphertext: String
+
+    public init(encKey: String, iv: String, ciphertext: String) {
+        self.encrypted = true
+        self.enc_key = encKey
+        self.iv = iv
+        self.ciphertext = ciphertext
+    }
+}
+
+public struct EncryptedResponseEnvelope: Codable {
+    public let encrypted: Bool
+    public let iv: String
+    public let ciphertext: String
 }
 
 public struct GoogleAuthRequest: Codable {

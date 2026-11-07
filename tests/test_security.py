@@ -5,6 +5,7 @@ import hmac
 import io
 import json
 import os
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from unittest import IsolatedAsyncioTestCase
@@ -179,7 +180,7 @@ class SecurityHardeningTests(IsolatedAsyncioTestCase):
         path = "/api/user/profile"
         payload = {"bio": "Cryptographically verified bio"}
         body_bytes = json.dumps(payload).encode("utf-8")
-        timestamp = str(int(_utcnow().timestamp()))
+        timestamp = str(int(time.time()))
         nonce = f"nonce_{time.time()}_{os.urandom(4).hex()}"
 
         body_hash = hashlib.sha256(body_bytes).hexdigest()
@@ -212,7 +213,7 @@ class SecurityHardeningTests(IsolatedAsyncioTestCase):
         method = "PUT"
         path = "/api/user/profile"
         original_body = json.dumps({"bio": "Original bio"}).encode("utf-8")
-        timestamp = str(int(_utcnow().timestamp()))
+        timestamp = str(int(time.time()))
         nonce = f"nonce_{time.time()}_{os.urandom(4).hex()}"
 
         body_hash = hashlib.sha256(original_body).hexdigest()
@@ -244,7 +245,7 @@ class SecurityHardeningTests(IsolatedAsyncioTestCase):
         path = "/api/user/profile"
         body_bytes = json.dumps({"bio": "Expired"}).encode("utf-8")
         # Timestamp 10 minutes in the past (> 300s tolerance)
-        expired_ts = str(int(_utcnow().timestamp()) - 600)
+        expired_ts = str(int(time.time()) - 600)
         nonce = f"nonce_{time.time()}_{os.urandom(4).hex()}"
 
         body_hash = hashlib.sha256(body_bytes).hexdigest()
@@ -273,7 +274,7 @@ class SecurityHardeningTests(IsolatedAsyncioTestCase):
         method = "PUT"
         path = "/api/user/profile"
         body_bytes = json.dumps({"bio": "Replay test"}).encode("utf-8")
-        timestamp = str(int(_utcnow().timestamp()))
+        timestamp = str(int(time.time()))
         nonce = f"fixed_reused_nonce_{os.urandom(4).hex()}"
 
         body_hash = hashlib.sha256(body_bytes).hexdigest()
@@ -356,3 +357,162 @@ class SecurityHardeningTests(IsolatedAsyncioTestCase):
         async with SessionFactory() as db:
             db_key = await db.get(SigningKeyModel, key_id)
             self.assertIsNone(db_key, "Signing keys must be deleted on user logout")
+
+    # ---------------------------------------------------------
+    # 6. Application-Layer Credential Encryption & Anti-Replay
+    # ---------------------------------------------------------
+    def _create_encrypted_envelope(
+        self,
+        public_key_pem: str,
+        payload_dict: dict,
+        timestamp: int | None = None,
+        nonce: str | None = None,
+    ) -> tuple[dict, bytes]:
+        from cryptography.hazmat.primitives.asymmetric import padding
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        import secrets
+
+        pub_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
+        aes_key = AESGCM.generate_key(bit_length=256)
+        enc_key = pub_key.encrypt(
+            aes_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+        iv = secrets.token_bytes(12)
+        inner = {
+            "payload": payload_dict,
+            "timestamp": int(time.time()) if timestamp is None else timestamp,
+            "nonce": secrets.token_hex(16) if nonce is None else nonce,
+        }
+        inner_bytes = json.dumps(inner).encode("utf-8")
+        aesgcm = AESGCM(aes_key)
+        ciphertext = aesgcm.encrypt(iv, inner_bytes, None)
+        envelope = {
+            "encrypted": True,
+            "enc_key": base64.b64encode(enc_key).decode("ascii"),
+            "iv": base64.b64encode(iv).decode("ascii"),
+            "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+        }
+        return envelope, aes_key
+
+    def _decrypt_encrypted_response(self, response_json: dict, aes_key: bytes) -> dict:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        iv = base64.b64decode(response_json["iv"])
+        ciphertext = base64.b64decode(response_json["ciphertext"])
+        aesgcm = AESGCM(aes_key)
+        plaintext = aesgcm.decrypt(iv, ciphertext, None)
+        return json.loads(plaintext.decode("utf-8"))
+
+    async def test_server_encryption_key_endpoint(self):
+        res = await self.client.get("/api/auth/encryption-key")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("public_key", data)
+        self.assertTrue(data["public_key"].startswith("-----BEGIN PUBLIC KEY-----"))
+        self.assertEqual(data["algorithm"], "RSA-OAEP-256")
+        self.assertEqual(data["format"], "SPKI")
+
+    async def test_encrypted_login_hides_credentials_and_returns_encrypted_reply(self):
+        email = f"enc_user_{secrets.token_hex(4)}@example.com"
+        password = "SecurePassword123!"
+        
+        # Register user normally first
+        reg_res = await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Encrypted Test User", "email": email, "password": password},
+        )
+        self.assertEqual(reg_res.status_code, 201)
+
+        # Get server RSA public key
+        key_res = await self.client.get("/api/auth/encryption-key")
+        self.assertEqual(key_res.status_code, 200)
+        pub_key_pem = key_res.json()["public_key"]
+
+        # Encrypt login payload
+        envelope, aes_key = self._create_encrypted_envelope(
+            pub_key_pem,
+            {"email": email, "password": password},
+        )
+
+        # Verify plaintext credentials are NOT in the envelope
+        envelope_str = json.dumps(envelope)
+        self.assertNotIn(email, envelope_str)
+        self.assertNotIn(password, envelope_str)
+
+        # Perform login with encrypted envelope
+        login_res = await self.client.post("/api/auth/login", json=envelope)
+        self.assertEqual(login_res.status_code, 200)
+        self.assertEqual(login_res.headers.get("x-encrypted-response"), "1")
+
+        # Plaintext response body is opaque ciphertext
+        res_data = login_res.json()
+        self.assertTrue(res_data.get("encrypted"))
+        self.assertIn("ciphertext", res_data)
+        self.assertNotIn(email, login_res.text)
+
+        # Decrypt response with client's ephemeral AES key
+        decrypted = self._decrypt_encrypted_response(res_data, aes_key)
+        self.assertEqual(decrypted["email"], email)
+        self.assertEqual(decrypted["full_name"], "Encrypted Test User")
+
+    async def test_replaying_encrypted_login_rejected(self):
+        email = f"enc_replay_{secrets.token_hex(4)}@example.com"
+        password = "SecurePassword123!"
+        
+        await self.client.post(
+            "/api/auth/register",
+            json={"full_name": "Replay User", "email": email, "password": password},
+        )
+        key_res = await self.client.get("/api/auth/encryption-key")
+        pub_key_pem = key_res.json()["public_key"]
+
+        envelope, _ = self._create_encrypted_envelope(
+            pub_key_pem,
+            {"email": email, "password": password},
+        )
+
+        # First request succeeds
+        first_res = await self.client.post("/api/auth/login", json=envelope)
+        self.assertEqual(first_res.status_code, 200)
+
+        # Second request with identical envelope / nonce is rejected as replay attack
+        second_res = await self.client.post("/api/auth/login", json=envelope)
+        self.assertEqual(second_res.status_code, 403)
+        self.assertIn("Replay attack detected", second_res.json()["detail"])
+
+    async def test_expired_timestamp_in_envelope_rejected(self):
+        key_res = await self.client.get("/api/auth/encryption-key")
+        pub_key_pem = key_res.json()["public_key"]
+
+        # Timestamp 400 seconds in the past
+        envelope, _ = self._create_encrypted_envelope(
+            pub_key_pem,
+            {"email": "dummy@example.com", "password": "password123"},
+            timestamp=int(time.time()) - 400,
+        )
+
+        res = await self.client.post("/api/auth/login", json=envelope)
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("expired", res.json()["detail"])
+
+    async def test_tampered_ciphertext_in_envelope_rejected(self):
+        key_res = await self.client.get("/api/auth/encryption-key")
+        pub_key_pem = key_res.json()["public_key"]
+
+        envelope, _ = self._create_encrypted_envelope(
+            pub_key_pem,
+            {"email": "dummy@example.com", "password": "password123"},
+        )
+        # Corrupt the ciphertext bytes
+        tampered_bytes = bytearray(base64.b64decode(envelope["ciphertext"]))
+        tampered_bytes[0] ^= 0xFF
+        envelope["ciphertext"] = base64.b64encode(tampered_bytes).decode("ascii")
+
+        res = await self.client.post("/api/auth/login", json=envelope)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("failed to decrypt", res.json()["detail"].lower())

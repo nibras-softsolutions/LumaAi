@@ -34,11 +34,13 @@ final class APIEndpointTests: XCTestCase {
         XCTAssertEqual(APIEndpoint.clearAllConversations.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/chat/conversations")
         XCTAssertEqual(APIEndpoint.syncConversations.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/chat/sync")
         XCTAssertEqual(APIEndpoint.signingKey.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/auth/signing-key")
+        XCTAssertEqual(APIEndpoint.encryptionKey.url(with: config).absoluteString, "https://lumaai-j0u3.onrender.com/api/auth/encryption-key")
     }
 
     func testEndpointHTTPMethods() {
         XCTAssertEqual(APIEndpoint.health.httpMethod, "GET")
         XCTAssertEqual(APIEndpoint.aiHealth.httpMethod, "GET")
+        XCTAssertEqual(APIEndpoint.encryptionKey.httpMethod, "GET")
         XCTAssertEqual(APIEndpoint.chatStream.httpMethod, "POST")
         XCTAssertEqual(APIEndpoint.imageGenerate.httpMethod, "POST")
         XCTAssertEqual(APIEndpoint.login.httpMethod, "POST")

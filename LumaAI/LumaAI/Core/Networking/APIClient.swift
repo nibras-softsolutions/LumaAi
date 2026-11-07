@@ -412,14 +412,145 @@ public final class APIClient: APIClientProtocol {
         return request
     }
 
+    // =========================================================================
+    // Application-Layer Credential Encryption & Anti-Replay (RSA-OAEP + AES-GCM)
+    // =========================================================================
+    private var cachedServerEncryptionKey: (key: SecKey, keyId: String)? = nil
+
+    private func obtainServerEncryptionKey() async throws -> (SecKey, String) {
+        if let cached = cachedServerEncryptionKey {
+            return (cached.key, cached.keyId)
+        }
+        let url = APIEndpoint.encryptionKey.url(with: configuration)
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await perform(req)
+        guard let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 else {
+            throw NetworkError.serverError(statusCode: 500, message: "Failed to fetch server encryption key")
+        }
+        let keyResp = try JSONDecoder().decode(ServerEncryptionKeyResponse.self, from: data)
+        let b64 = keyResp.publicKey
+            .replacingOccurrences(of: "-----BEGIN PUBLIC KEY-----", with: "")
+            .replacingOccurrences(of: "-----END PUBLIC KEY-----", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let derData = Data(base64Encoded: b64) else {
+            throw NetworkError.serverError(statusCode: 500, message: "Invalid base64 in server public key")
+        }
+        let keyDict: [CFString: Any] = [
+            kSecAttrKeyType: kSecAttrKeyTypeRSA,
+            kSecAttrKeyClass: kSecAttrKeyClassPublic,
+            kSecAttrKeySizeInBits: 2048
+        ]
+        var error: Unmanaged<CFError>?
+        guard let secKey = SecKeyCreateWithData(derData as CFData, keyDict as CFDictionary, &error) else {
+            let desc = error?.takeRetainedValue().localizedDescription ?? "SecKeyCreateWithData failed"
+            throw NetworkError.serverError(statusCode: 500, message: desc)
+        }
+        cachedServerEncryptionKey = (secKey, keyResp.keyId)
+        return (secKey, keyResp.keyId)
+    }
+
+    private func encryptCredentialBody(_ bodyData: Data) async -> (Data, SymmetricKey)? {
+        guard let (serverKey, _) = try? await obtainServerEncryptionKey() else {
+            return nil
+        }
+        do {
+            let aesKey = SymmetricKey(size: .bits256)
+            let rawAesData = aesKey.withUnsafeBytes { Data($0) }
+
+            var rsaError: Unmanaged<CFError>?
+            guard let encKeyData = SecKeyCreateEncryptedData(serverKey, .rsaEncryptionOAEPSHA256, rawAesData as CFData, &rsaError) as Data? else {
+                return nil
+            }
+
+            let nonceString = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+            let timestamp = Int(Date().timeIntervalSince1970)
+
+            let innerObj: [String: Any]
+            if let jsonDict = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] {
+                innerObj = [
+                    "payload": jsonDict,
+                    "timestamp": timestamp,
+                    "nonce": nonceString
+                ]
+            } else {
+                innerObj = [
+                    "timestamp": timestamp,
+                    "nonce": nonceString
+                ]
+            }
+            let innerData = try JSONSerialization.data(withJSONObject: innerObj)
+
+            let gcmNonce = try AES.GCM.Nonce()
+            let sealedBox = try AES.GCM.seal(innerData, using: aesKey, nonce: gcmNonce)
+            let combinedCiphertext = sealedBox.ciphertext + sealedBox.tag
+
+            let envelope = EncryptedRequestEnvelope(
+                encKey: encKeyData.base64EncodedString(),
+                iv: Data(gcmNonce).base64EncodedString(),
+                ciphertext: combinedCiphertext.base64EncodedString()
+            )
+            let envelopeData = try JSONEncoder().encode(envelope)
+            return (envelopeData, aesKey)
+        } catch {
+            print("[APIClient] Encryption failed, falling back: \(error)")
+            return nil
+        }
+    }
+
+    private func decryptResponseBody(_ data: Data, aesKey: SymmetricKey) -> Data {
+        guard let envelope = try? JSONDecoder().decode(EncryptedResponseEnvelope.self, from: data),
+              let ivData = Data(base64Encoded: envelope.iv),
+              let ciphertextData = Data(base64Encoded: envelope.ciphertext),
+              ciphertextData.count > 16 else {
+            return data
+        }
+        do {
+            let nonce = try AES.GCM.Nonce(data: ivData)
+            let tag = ciphertextData.suffix(16)
+            let actualCiphertext = ciphertextData.prefix(ciphertextData.count - 16)
+            let sealedBox = try AES.GCM.SealedBox(nonce: nonce, ciphertext: actualCiphertext, tag: tag)
+            let decryptedData = try AES.GCM.open(sealedBox, using: aesKey)
+            return decryptedData
+        } catch {
+            print("[APIClient] Failed to decrypt response envelope: \(error)")
+            return data
+        }
+    }
+
     public func request<T: Decodable>(_ endpoint: APIEndpoint, body: (any Encodable)? = nil) async throws -> T {
+        var isCredentialEndpoint = false
+        switch endpoint {
+        case .login, .register, .googleAuth, .forgotPassword:
+            isCredentialEndpoint = true
+        default:
+            isCredentialEndpoint = false
+        }
+
         var urlRequest = try createRequest(endpoint, body: body)
+        var clientAesKey: SymmetricKey? = nil
+
+        if isCredentialEndpoint, let bodyData = urlRequest.httpBody {
+            if let (encryptedData, aesKey) = await encryptCredentialBody(bodyData) {
+                urlRequest.httpBody = encryptedData
+                clientAesKey = aesKey
+            }
+        }
+
         await signRequestIfNeeded(&urlRequest, endpoint: endpoint, bodyData: urlRequest.httpBody)
         let (data, response) = try await perform(urlRequest)
 
         saveCookies(from: response, for: urlRequest.url)
 
-        if data.isEmpty {
+        var finalData = data
+        if let aesKey = clientAesKey {
+            finalData = decryptResponseBody(data, aesKey: aesKey)
+        }
+
+        if finalData.isEmpty {
             if T.self == ServerHealth.self {
                 return ServerHealth(status: "ok") as! T
             }
@@ -431,7 +562,7 @@ public final class APIClient: APIClientProtocol {
         do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(T.self, from: data)
+            return try decoder.decode(T.self, from: finalData)
         } catch {
             throw NetworkError.decodingError(error.localizedDescription)
         }

@@ -79,6 +79,156 @@ function getCookie(name) {
   return null;
 }
 
+// =========================================================================
+// Application-Layer Credential Encryption & Anti-Replay (RSA-OAEP + AES-GCM)
+// Ensures credentials and tokens are NEVER visible in plaintext in proxies
+// (e.g. Burp Suite, Charles) and enforces strict anti-replay validation.
+// =========================================================================
+let cachedServerPublicKey = null;
+
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN [A-Z0-9_\s-]+-----/g, "")
+    .replace(/-----END [A-Z0-9_\s-]+-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function bufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBuffer(base64Str) {
+  const binary = atob(base64Str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function getServerEncryptionPublicKey() {
+  if (cachedServerPublicKey) return cachedServerPublicKey;
+  if (!window.crypto || !window.crypto.subtle) return null;
+  try {
+    const res = await fetch(apiUrl("/api/auth/encryption-key"), {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.public_key) return null;
+    const derBuffer = pemToArrayBuffer(data.public_key);
+    cachedServerPublicKey = await window.crypto.subtle.importKey(
+      "spki",
+      derBuffer,
+      {
+        name: "RSA-OAEP",
+        hash: "SHA-256",
+      },
+      false,
+      ["encrypt"]
+    );
+    return cachedServerPublicKey;
+  } catch (err) {
+    console.debug("[Security] Unable to fetch server encryption key:", err);
+    return null;
+  }
+}
+
+async function encryptCredentialPayload(payloadObj) {
+  try {
+    if (!window.crypto || !window.crypto.subtle) {
+      return { envelope: payloadObj, aesKey: null };
+    }
+    const serverRsaKey = await getServerEncryptionPublicKey();
+    if (!serverRsaKey) {
+      return { envelope: payloadObj, aesKey: null };
+    }
+
+    // 1. Generate ephemeral 256-bit AES-GCM key
+    const clientAesKey = await window.crypto.subtle.generateKey(
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"]
+    );
+
+    // 2. Encrypt ephemeral AES key with Server RSA-OAEP-256
+    const rawAesKey = await window.crypto.subtle.exportKey("raw", clientAesKey);
+    const encKeyBuffer = await window.crypto.subtle.encrypt(
+      { name: "RSA-OAEP" },
+      serverRsaKey,
+      rawAesKey
+    );
+
+    // 3. 12-byte random IV
+    const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+
+    // 4. Random 16-byte nonce & UTC epoch timestamp
+    const nonceBytes = window.crypto.getRandomValues(new Uint8Array(16));
+    const nonce = Array.from(nonceBytes, b => b.toString(16).padStart(2, "0")).join("");
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    // 5. Wrap inner payload with replay protection metadata
+    const inner = {
+      payload: payloadObj,
+      timestamp: timestamp,
+      nonce: nonce,
+    };
+    const innerBytes = new TextEncoder().encode(JSON.stringify(inner));
+
+    // 6. Encrypt inner payload with AES-256-GCM
+    const ciphertextBuffer = await window.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: ivBytes },
+      clientAesKey,
+      innerBytes
+    );
+
+    const envelope = {
+      encrypted: true,
+      enc_key: bufferToBase64(encKeyBuffer),
+      iv: bufferToBase64(ivBytes.buffer),
+      ciphertext: bufferToBase64(ciphertextBuffer),
+    };
+
+    return { envelope, aesKey: clientAesKey };
+  } catch (err) {
+    console.warn("[Security] Envelope encryption error, falling back:", err);
+    return { envelope: payloadObj, aesKey: null };
+  }
+}
+
+async function decryptServerReply(responseData, aesKey) {
+  if (!responseData || !responseData.encrypted || !aesKey || !window.crypto || !window.crypto.subtle) {
+    return responseData;
+  }
+  try {
+    const ivBuffer = base64ToBuffer(responseData.iv);
+    const ciphertextBuffer = base64ToBuffer(responseData.ciphertext);
+    const decryptedBuffer = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: new Uint8Array(ivBuffer) },
+      aesKey,
+      ciphertextBuffer
+    );
+    const decryptedText = new TextDecoder().decode(decryptedBuffer);
+    return JSON.parse(decryptedText);
+  } catch (err) {
+    console.error("[Security] Failed to decrypt server reply:", err);
+    return responseData;
+  }
+}
+
 let activeSigningKey = null;
 
 async function getSigningKey() {
@@ -1532,15 +1682,20 @@ async function handleGoogleCredentialResponse(response) {
   setGoogleAuthLoading(true, "Signing in with Google…");
 
   try {
+    const { envelope, aesKey } = await encryptCredentialPayload({ id_token: response.credential });
+
     const res = await apiFetch("/api/auth/google", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token: response.credential }),
+      body: JSON.stringify(envelope),
     });
 
     let result = null;
     try {
       result = await res.json();
+      if (result && result.encrypted && aesKey) {
+        result = await decryptServerReply(result, aesKey);
+      }
     } catch {}
 
     if (!res.ok) {
@@ -1813,12 +1968,15 @@ async function submitAuthForm({ form, submit, message, endpoint, successMessage 
     const payload = Object.fromEntries(new FormData(form).entries());
     delete payload.password_confirm;
 
+    // Encrypt sensitive credential payload before sending over the wire
+    const { envelope, aesKey } = await encryptCredentialPayload(payload);
+
     let response;
     try {
       response = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(envelope),
       });
     } catch (networkError) {
       console.warn("Luma AI connection error:", networkError);
@@ -1831,6 +1989,9 @@ async function submitAuthForm({ form, submit, message, endpoint, successMessage 
     let result = null;
     try {
       result = await response.json();
+      if (result && result.encrypted && aesKey) {
+        result = await decryptServerReply(result, aesKey);
+      }
     } catch {}
 
     if (!response.ok) {

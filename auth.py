@@ -5,11 +5,13 @@ import base64
 import hashlib
 import hmac
 import io
+import json
 import logging
 import os
 from pathlib import Path
 import re
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
@@ -18,10 +20,16 @@ from dotenv import load_dotenv
 import httpx
 from PIL import Image, ImageOps
 
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 load_dotenv()
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 from pwdlib.hashers.argon2 import Argon2Hasher
@@ -513,7 +521,7 @@ def _verify_csrf(request: Request) -> None:
 
 
 def _prune_nonces_and_keys():
-    now_ts = _utcnow().timestamp()
+    now_ts = time.time()
     expired_nonces = [n for n, ts in _seen_nonces.items() if now_ts - ts > NONCE_EXPIRATION_SECONDS]
     for n in expired_nonces:
         _seen_nonces.pop(n, None)
@@ -602,7 +610,7 @@ async def verify_request_signature(
             detail="Invalid X-Timestamp header format.",
         )
 
-    now_ts = _utcnow().timestamp()
+    now_ts = time.time()
     if abs(now_ts - ts) > NONCE_EXPIRATION_SECONDS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -663,6 +671,181 @@ def sign_response(response: Response, secret: str, nonce: str) -> None:
     response.headers["X-Response-Timestamp"] = now_ts
     response.headers["X-Response-Nonce"] = nonce
     response.headers["X-Response-Signature"] = sig
+
+
+# ==============================================================================
+# Application-Layer Encryption & Anti-Replay System (RSA-OAEP + AES-256-GCM)
+# ==============================================================================
+_SERVER_ENCRYPTION_PRIVATE_KEY: rsa.RSAPrivateKey | None = None
+_SERVER_ENCRYPTION_PUBLIC_KEY_PEM: str | None = None
+
+
+def get_server_encryption_key_pair() -> tuple[rsa.RSAPrivateKey, str]:
+    global _SERVER_ENCRYPTION_PRIVATE_KEY, _SERVER_ENCRYPTION_PUBLIC_KEY_PEM
+    if _SERVER_ENCRYPTION_PRIVATE_KEY is not None and _SERVER_ENCRYPTION_PUBLIC_KEY_PEM is not None:
+        return _SERVER_ENCRYPTION_PRIVATE_KEY, _SERVER_ENCRYPTION_PUBLIC_KEY_PEM
+
+    env_pem = os.getenv("SERVER_ENCRYPTION_PRIVATE_KEY_PEM")
+    if env_pem:
+        try:
+            _SERVER_ENCRYPTION_PRIVATE_KEY = serialization.load_pem_private_key(
+                env_pem.encode("utf-8"),
+                password=None,
+            )
+        except Exception:
+            _SERVER_ENCRYPTION_PRIVATE_KEY = None
+
+    if _SERVER_ENCRYPTION_PRIVATE_KEY is None:
+        _SERVER_ENCRYPTION_PRIVATE_KEY = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+
+    _SERVER_ENCRYPTION_PUBLIC_KEY_PEM = _SERVER_ENCRYPTION_PRIVATE_KEY.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("utf-8")
+
+    return _SERVER_ENCRYPTION_PRIVATE_KEY, _SERVER_ENCRYPTION_PUBLIC_KEY_PEM
+
+
+def decrypt_request_envelope(body_bytes: bytes) -> tuple[dict, bytes | None]:
+    """
+    Inspects request body. If encrypted envelope is present, decrypts ephemeral AES key
+    via RSA-OAEP SHA-256, decrypts payload with AES-256-GCM, validates timestamp & nonce
+    for replay protection, and returns (payload_dict, aes_key).
+    If body is standard unencrypted JSON, returns (parsed_json_dict, None).
+    """
+    if not body_bytes:
+        return {}, None
+    try:
+        data = json.loads(body_bytes.decode("utf-8"))
+    except Exception:
+        return {}, None
+
+    if not isinstance(data, dict) or not data.get("encrypted"):
+        return data, None
+
+    enc_key_b64 = data.get("enc_key")
+    iv_b64 = data.get("iv")
+    ciphertext_b64 = data.get("ciphertext")
+
+    if not (enc_key_b64 and iv_b64 and ciphertext_b64):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Malformed encrypted payload envelope.",
+        )
+
+    priv_key, _ = get_server_encryption_key_pair()
+
+    try:
+        enc_key_bytes = base64.b64decode(enc_key_b64)
+        client_aes_key = priv_key.decrypt(
+            enc_key_bytes,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to decrypt request key. Invalid encryption parameters.",
+        ) from exc
+
+    try:
+        iv_bytes = base64.b64decode(iv_b64)
+        ciphertext_bytes = base64.b64decode(ciphertext_b64)
+        aesgcm = AESGCM(client_aes_key)
+        decrypted_bytes = aesgcm.decrypt(iv_bytes, ciphertext_bytes, None)
+        inner_data = json.loads(decrypted_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to decrypt request ciphertext. Tampering or key mismatch.",
+        ) from exc
+
+    # Anti-Replay Check (Nonce & Timestamp)
+    now_ts = time.time()
+    req_timestamp = inner_data.get("timestamp")
+    req_nonce = inner_data.get("nonce")
+
+    if req_timestamp is not None:
+        try:
+            ts_val = float(req_timestamp)
+            if abs(now_ts - ts_val) > NONCE_EXPIRATION_SECONDS:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Encrypted request expired. Please resubmit.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid timestamp in encrypted request.",
+            )
+
+    if req_nonce:
+        _prune_nonces_and_keys()
+        if req_nonce in _seen_nonces:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Replay attack detected: nonce has already been used.",
+            )
+        _seen_nonces[req_nonce] = now_ts
+
+    payload_content = inner_data.get("payload")
+    if isinstance(payload_content, dict):
+        clean_payload = payload_content
+    else:
+        clean_payload = {k: v for k, v in inner_data.items() if k not in {"timestamp", "nonce"}}
+
+    return clean_payload, client_aes_key
+
+
+def encrypt_response_envelope(
+    content_dict: dict,
+    aes_key: bytes | None,
+    status_code: int = 200,
+) -> JSONResponse:
+    """
+    Encrypts response payload with AES-256-GCM using client's ephemeral AES key.
+    If no aes_key is provided, returns standard JSONResponse.
+    """
+    if aes_key is None:
+        return JSONResponse(content=content_dict, status_code=status_code)
+
+    try:
+        iv = os.urandom(12)
+        aesgcm = AESGCM(aes_key)
+        json_bytes = json.dumps(content_dict).encode("utf-8")
+        ciphertext = aesgcm.encrypt(iv, json_bytes, None)
+
+        envelope = {
+            "encrypted": True,
+            "iv": base64.b64encode(iv).decode("utf-8"),
+            "ciphertext": base64.b64encode(ciphertext).decode("utf-8"),
+        }
+        return JSONResponse(
+            content=envelope,
+            status_code=status_code,
+            headers={"X-Encrypted-Response": "1"},
+        )
+    except Exception:
+        return JSONResponse(content=content_dict, status_code=status_code)
+
+
+@router.get("/encryption-key")
+async def get_encryption_key() -> dict:
+    _, pub_pem = get_server_encryption_key_pair()
+    return {
+        "algorithm": "RSA-OAEP-256",
+        "format": "SPKI",
+        "public_key": pub_pem,
+        "key_id": "luma_srv_enc_v1",
+    }
 
 
 async def initialize_database() -> None:
@@ -743,11 +926,17 @@ async def _add_session(db: AsyncSession, user_id: str) -> str:
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    data: RegisterRequest,
     request: Request,
     response: Response,
-) -> User:
+) -> User | Response:
     _ensure_same_origin(request)
+    raw_body = await request.body()
+    payload_dict, aes_key = decrypt_request_envelope(raw_body)
+    try:
+        data = RegisterRequest(**payload_dict)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors())
+
     hashed_password = await asyncio.to_thread(password_hasher.hash, data.password)
     token: str
     try:
@@ -766,6 +955,13 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="Unable to create an account with this email. Try logging in instead.",
         ) from exc
+
+    if aes_key is not None:
+        user_resp = _sync_user_profile_url(user).model_dump(mode="json")
+        res = encrypt_response_envelope(user_resp, aes_key, status_code=status.HTTP_201_CREATED)
+        _set_session_cookie(res, token)
+        return res
+
     _set_session_cookie(response, token)
     return user
 
@@ -857,11 +1053,17 @@ async def verify_google_id_token(token: str) -> dict:
 
 @router.post("/google", response_model=UserResponse)
 async def google_login(
-    data: GoogleLoginRequest,
     request: Request,
     response: Response,
-) -> User:
+) -> User | Response:
     _ensure_same_origin(request)
+    raw_body = await request.body()
+    payload_dict, aes_key = decrypt_request_envelope(raw_body)
+    try:
+        data = GoogleLoginRequest(**payload_dict)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors())
+
     raw_token = data.get_token()
     idinfo = await verify_google_id_token(raw_token)
 
@@ -905,17 +1107,29 @@ async def google_login(
                 user.profile_image_url = picture
         token = await _add_session(db, user.id)
 
+    if aes_key is not None:
+        user_resp = _sync_user_profile_url(user).model_dump(mode="json")
+        res = encrypt_response_envelope(user_resp, aes_key, status_code=status.HTTP_200_OK)
+        _set_session_cookie(res, token)
+        return res
+
     _set_session_cookie(response, token)
     return user
 
 
 @router.post("/login", response_model=UserResponse)
 async def login(
-    data: LoginRequest,
     request: Request,
     response: Response,
-) -> User:
+) -> User | Response:
     _ensure_same_origin(request)
+    raw_body = await request.body()
+    payload_dict, aes_key = decrypt_request_envelope(raw_body)
+    try:
+        data = LoginRequest(**payload_dict)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors())
+
     now = _utcnow()
     digest = _email_digest(data.email)
     outcome = "invalid"
@@ -963,6 +1177,13 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email or password is incorrect.",
         )
+
+    if aes_key is not None:
+        user_resp = _sync_user_profile_url(user).model_dump(mode="json")
+        res = encrypt_response_envelope(user_resp, aes_key, status_code=status.HTTP_200_OK)
+        _set_session_cookie(res, token)
+        return res
+
     _set_session_cookie(response, token)
     return user
 
@@ -996,9 +1217,17 @@ class ForgotPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordRequest) -> dict:
+async def forgot_password(request: Request) -> Response:
+    raw_body = await request.body()
+    payload_dict, aes_key = decrypt_request_envelope(raw_body)
+    try:
+        data = ForgotPasswordRequest(**payload_dict)
+    except ValidationError as exc:
+        raise RequestValidationError(exc.errors())
+
     normalized_email = data.email.lower().strip()
-    return {"message": f"If an account exists for {normalized_email}, a password reset link has been sent."}
+    result = {"message": f"If an account exists for {normalized_email}, a password reset link has been sent."}
+    return encrypt_response_envelope(result, aes_key, status_code=status.HTTP_200_OK)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
